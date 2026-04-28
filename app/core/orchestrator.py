@@ -31,6 +31,7 @@ import app.tools.workspace_tools # noqa: F401
 import app.tools.code_tools      # noqa: F401
 import app.tools.agent_tools     # noqa: F401
 import app.tools.web_tools       # noqa: F401
+import app.tools.graph_tools     # noqa: F401
 
 import ollama
 

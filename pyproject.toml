@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "qwen-coder"
 version = "0.1.0"
 description = "Coding agent powered by local LLMs via Ollama"
-readme = "harness/PROJECT_SPECS.md"
+readme = "app/docs/PROJECT_SPECS.md"
 requires-python = ">=3.10"
 dependencies = [
     "ollama>=0.4.0",
@@ -22,14 +22,57 @@ dependencies = [
     "email-validator>=2.2.0",
     "stripe>=13.0.0",
     "firebase-admin>=6.5.0",
+    "networkx>=3.0",
+    "tree-sitter>=0.23.0",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-go",
+    "tree-sitter-rust",
+    "tree-sitter-java",
+    "tree-sitter-c",
+    "tree-sitter-cpp",
+    "tree-sitter-ruby",
+    "tree-sitter-c-sharp",
+    "tree-sitter-kotlin",
+    "tree-sitter-scala",
+    "tree-sitter-php",
+    "tree-sitter-swift",
+    "tree-sitter-lua",
+    "tree-sitter-zig",
+    "tree-sitter-powershell",
+    "tree-sitter-elixir",
+    "tree-sitter-objc",
+    "tree-sitter-julia",
+    "tree-sitter-verilog",
+]
+
+[project.optional-dependencies]
+graph-watch = ["watchdog"]
+graph-mcp = ["mcp"]
+graph-cluster = ["graspologic; python_version < '3.13'"]
+graph-office = ["pypdf", "python-docx", "openpyxl"]
+graph-media = ["faster-whisper", "yt-dlp"]
+graph-viz = ["matplotlib"]
+graph-all = [
+    "watchdog",
+    "mcp",
+    "graspologic; python_version < '3.13'",
+    "pypdf",
+    "python-docx",
+    "openpyxl",
+    "faster-whisper",
+    "yt-dlp",
+    "matplotlib",
 ]
 
 [project.scripts]
-qwen-coder = "harness.main:main"
-qwen-coder-capture = "harness.scripts.capture_model_formats:main"
+qwen-coder = "app.__main__:main"
+# qwen-coder-capture = "app.scripts.capture_model_formats:main"
+graphify = "graph.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["harness*"]
+include = ["app*", "graph*", "cli*", "api*"]
 
 [tool.setuptools.package-data]
-"harness.prompts" = ["*.md"]
+"app.prompts" = ["*.md"]

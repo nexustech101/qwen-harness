@@ -40,6 +40,8 @@ htmlcov/
 *.txt
 *.*shm
 *.*wal
+*graph.md
+.graph-out/
 *graph.py
 legacy.py
 index.html

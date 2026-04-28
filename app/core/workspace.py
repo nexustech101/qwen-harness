@@ -23,6 +23,8 @@ STATUS_FILE = "status.md"
 CONTEXT_SUMMARY_FILE = "context_summary.md"
 CONTEXT_LOG_FILE = "context_log.md"
 WORKSPACE_META_FILE = "workspace_meta.json"
+PROJECT_GRAPH_FILE = "project_graph.json"
+PROJECT_GRAPH_CONTEXT_FILE = "project_graph_context.json"
 
 AGENT_TASK_FILE = "task.md"
 AGENT_DIRECTIVES_FILE = "directives.md"
@@ -235,6 +237,14 @@ class Workspace:
     def read_context_log(self) -> str:
         path = self._base / CONTEXT_LOG_FILE
         return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    def graph_path(self) -> Path:
+        self.ensure_exists()
+        return self._base / PROJECT_GRAPH_FILE
+
+    def graph_context_path(self) -> Path:
+        self.ensure_exists()
+        return self._base / PROJECT_GRAPH_CONTEXT_FILE
 
     def update_context_summary(
         self,

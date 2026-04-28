@@ -256,7 +256,12 @@ class ExecutionEngine:
                 )
 
                 self._track_modified_paths(call)
-                result_envelopes.append(result.as_envelope(call))
+                envelope = result.as_envelope(call)
+                envelope["metadata"] = {
+                    **(envelope.get("metadata") or {}),
+                    **_retrievable_metadata(call.name, call.arguments),
+                }
+                result_envelopes.append(envelope)
 
             messages.append({"role": "assistant", "content": content})
 
@@ -379,10 +384,10 @@ class ExecutionEngine:
             return None
 
         if state.phase == "discover":
-            return ["file", "analysis", "workspace"]
+            return ["file", "analysis", "workspace", "graph"]
         if state.phase == "verify":
-            return ["code", "system", "file", "analysis", "workspace"]
-        return ["file", "analysis", "workspace", "code", "system", "web", "agent"]
+            return ["code", "system", "file", "analysis", "workspace", "graph"]
+        return ["file", "analysis", "workspace", "graph", "code", "system", "web", "agent"]
 
     def _advance_phase(self, phase: str, calls: list[ToolCall]) -> str:
         write_tools = {
@@ -433,6 +438,22 @@ def _summarize_tool_result(name: str, result) -> str:
     return (result.error or "failed")[:180]
 
 
+def _retrievable_metadata(name: str, arguments: dict) -> dict:
+    if name.startswith("graph_"):
+        return {
+            "retrievable": True,
+            "retrieval_tool": name,
+            "retrieval_args": arguments,
+        }
+    if name in {"read_file", "grep_workspace", "search_in_file", "list_directory", "find_files"}:
+        return {
+            "retrievable": True,
+            "retrieval_tool": name,
+            "retrieval_args": arguments,
+        }
+    return {}
+
+
 def _tool_signature(calls: list[ToolCall]) -> str:
     parts = []
     for call in calls:
@@ -443,6 +464,7 @@ def _tool_signature(calls: list[ToolCall]) -> str:
 
 def _prune_messages(messages: list[dict]) -> list[dict]:
     """Prune messages while keeping critical context pinned."""
+    messages = _compact_retrievable_messages(messages)
     if len(messages) <= config.MAX_MESSAGES:
         return messages
 
@@ -463,6 +485,43 @@ def _prune_messages(messages: list[dict]) -> list[dict]:
     kept_tail = unpinned[-remaining_budget:] if remaining_budget > 0 else []
 
     return pinned + kept_tail
+
+
+def _compact_retrievable_messages(messages: list[dict], keep_tail: int = 4) -> list[dict]:
+    compacted: list[dict] = []
+    cutoff = max(len(messages) - keep_tail, 0)
+    for index, msg in enumerate(messages):
+        if index >= cutoff or msg.get("role") != "user":
+            compacted.append(msg)
+            continue
+
+        content = msg.get("content")
+        if not isinstance(content, str) or '"tool_results"' not in content:
+            compacted.append(msg)
+            continue
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            compacted.append(msg)
+            continue
+
+        changed = False
+        for result in payload.get("tool_results", []):
+            if not isinstance(result, dict):
+                continue
+            metadata = result.get("metadata") or {}
+            if metadata.get("retrievable") and result.get("data"):
+                tool = metadata.get("retrieval_tool") or result.get("name")
+                result["data"] = (
+                    "[compacted: retrievable project context; "
+                    f"use {tool} with metadata.retrieval_args to reload]"
+                )
+                changed = True
+        if changed:
+            msg = {**msg, "content": json.dumps(payload, ensure_ascii=False)}
+        compacted.append(msg)
+    return compacted
 
 
 def _looks_like_tool_json(text: str, registry: ToolRegistry) -> bool:

@@ -13,11 +13,12 @@ Use the project root for source code changes. The workspace path is for orchestr
 
 ## Execution Policy
 1. Prefer deterministic progress: inspect first, then edit, then verify.
-2. Use tools only when they add value. If no tool is needed, finish directly.
+2. For structural codebase questions, call graph tools before broad file reads or workspace grep.
 3. Batch independent tool calls in one response when safe.
 4. Keep edits minimal and scoped to the user request.
 5. Never invent file contents. Read before modifying.
 6. If a tool fails, adjust arguments and retry once.
+7. Do not keep retrievable project details in the live conversation longer than needed; use graph/context tools to reload them.
 
 ## Required Response Format
 Return ONLY one JSON object inside a ```json code block.

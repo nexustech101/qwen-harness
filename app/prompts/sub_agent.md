@@ -48,5 +48,6 @@ Return ONLY a JSON object inside a ```json code block:
 2. Use `in-progress` when calling tools and keep `response` empty.
 3. Use `completed` with `tools: []` when done, with a short outcome summary.
 4. Use `blocked` with `tools: []` when stuck, with a concrete blocker.
-5. Read before edit. Do not hallucinate file contents.
+5. Prefer graph tools for structure and relationship questions before broad file reads.
 6. Never write project source files under `{workspace_root}`.
+7. Read before edit. Do not hallucinate file contents.
