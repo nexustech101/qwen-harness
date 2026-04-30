@@ -54,6 +54,10 @@ TOOL_SCOPE_MODE: str = os.getenv("AGENT_TOOL_SCOPE_MODE", "dynamic").strip().low
 if TOOL_SCOPE_MODE not in {"dynamic", "all"}:
     TOOL_SCOPE_MODE = "dynamic"
 
+GRAPH_AUTO_REFRESH: str = os.getenv("AGENT_GRAPH_AUTO_REFRESH", "auto").strip().lower()
+if GRAPH_AUTO_REFRESH not in {"off", "stale", "auto"}:
+    GRAPH_AUTO_REFRESH = "auto"
+
 # ── Agent Loop ─────────────────────────────────────────────────────────────────
 MAX_TURNS: int = int(os.getenv("AGENT_MAX_TURNS", "30"))
 MAX_PARSE_RETRIES: int = 2

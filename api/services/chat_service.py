@@ -5,7 +5,7 @@ from typing import Any
 from registers.db import RecordNotFoundError
 
 from api.config.security import utc_now_iso
-from api.db.models import ChatMessage, ChatSession, LlmUsageEvent
+from api.db.models import ChatMessage, ChatSession, LLMUsageEvent
 
 
 def _now() -> str:
@@ -135,8 +135,8 @@ def record_usage_event(
     session_id: str | None = None,
     user_id: int | None = None,
     payload: dict[str, Any] | None = None,
-) -> LlmUsageEvent:
-    return LlmUsageEvent.objects.create(
+) -> LLMUsageEvent:
+    return LLMUsageEvent.objects.create(
         session_id=session_id,
         user_id=user_id,
         event_type=event_type,
@@ -145,11 +145,11 @@ def record_usage_event(
     )
 
 
-def list_usage_events_for_session(session_id: str, user_id: int | None = None) -> list[LlmUsageEvent]:
+def list_usage_events_for_session(session_id: str, user_id: int | None = None) -> list[LLMUsageEvent]:
     filters: dict[str, Any] = {"session_id": session_id}
     if user_id is not None:
         filters["user_id"] = user_id
-    return LlmUsageEvent.objects.filter(order_by="id", **filters)
+    return LLMUsageEvent.objects.filter(order_by="id", **filters)
 
 
 def get_conversation_history_for_user(session_id: str, user_id: int) -> dict[str, Any]:

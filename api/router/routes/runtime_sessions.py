@@ -42,7 +42,7 @@ from api.schemas.conversation import (
     ConversationHistoryResponse,
     ConversationMessagePublic,
     ConversationSessionPublic,
-    LlmUsageEventPublic,
+    LLMUsageEventPublic,
 )
 from api.services.chat_service import get_conversation_history_for_user, list_chat_sessions_for_user
 
@@ -168,7 +168,7 @@ async def get_conversation_history(session_id: str, current_user=Depends(get_cur
     return ConversationHistoryResponse(
         session=ConversationSessionPublic.from_model(history["session"]),
         messages=[ConversationMessagePublic.from_model(item) for item in history["messages"]],
-        usage_events=[LlmUsageEventPublic.from_model(item) for item in history["usage_events"]],
+        usage_events=[LLMUsageEventPublic.from_model(item) for item in history["usage_events"]],
     )
 
 

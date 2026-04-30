@@ -94,7 +94,7 @@ def _find_body(node, config: LanguageConfig):
     return None
 
 
-# -- Import handlers -----------------------------------------------------------
+# ---- Import handlers ---------------------------------------------------------
 
 def _import_python(node, source: bytes, file_nid: str, stem: str, edges: list, str_path: str) -> None:
     t = node.type

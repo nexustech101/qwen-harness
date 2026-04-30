@@ -37,7 +37,7 @@ from .conversation import (
     ConversationHistoryResponse,
     ConversationMessagePublic,
     ConversationSessionPublic,
-    LlmUsageEventPublic,
+    LLMUsageEventPublic,
 )
 from .ops import (
     AuthEventPage,
@@ -70,7 +70,7 @@ __all__ = [
     "FirebaseExchangeResponse",
     "HealthResponse",
     "LogoutRequest",
-    "LlmUsageEventPublic",
+    "LLMUsageEventPublic",
     "MessageResponse",
     "MigrationMetadataResponse",
     "MigrationRecord",

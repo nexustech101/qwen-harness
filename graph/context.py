@@ -9,7 +9,7 @@ from graph.store import GraphStore
 class GraphContextManager:
     def __init__(self, store: GraphStore) -> None:
         self.store = store
-        self.graph = store.load_or_refresh()
+        self.graph = store.load_or_refresh_if_stale()
         self.query = ProjectGraphQuery(self.graph)
 
     def load(self, query: str, limit: int = 5) -> dict:
@@ -57,8 +57,17 @@ class GraphContextManager:
         return "\n\n".join(sections) if sections else "(no graph context loaded)"
 
     def _match_symbol_ids(self, query: str, limit: int) -> list[str]:
+        query = query.strip()
         if query in self.graph.symbols:
             return [query]
+        lowered = query.lower()
+        exact = [
+            symbol.id
+            for symbol in self.graph.symbols.values()
+            if lowered in {symbol.name.lower(), symbol.qualname.lower()}
+        ]
+        if exact:
+            return sorted(exact)[:limit]
         return [item["symbol_id"] for item in self.query.find_symbol(query, limit=limit)]
 
 

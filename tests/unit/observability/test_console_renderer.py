@@ -1,6 +1,6 @@
 ﻿from rich.console import Console
 
-from app.logging.console_renderer import ConsoleRenderer, _short_args
+from app.core.console_renderer import ConsoleRenderer, _short_args
 from app.logging.trace import Trace
 
 

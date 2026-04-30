@@ -9,7 +9,7 @@ from api.schemas import (
     ConversationHistoryResponse,
     ConversationMessagePublic,
     ConversationSessionPublic,
-    LlmUsageEventPublic,
+    LLMUsageEventPublic,
     MigrationMetadataResponse,
     MigrationRecord,
     VersionMetadataResponse,
@@ -86,7 +86,7 @@ async def conversation_history_export(
             ConversationHistoryResponse(
                 session=ConversationSessionPublic.from_model(item["session"]),
                 messages=[ConversationMessagePublic.from_model(message) for message in item["messages"]],
-                usage_events=[LlmUsageEventPublic.from_model(event) for event in item["usage_events"]],
+                usage_events=[LLMUsageEventPublic.from_model(event) for event in item["usage_events"]],
             )
             for item in rows
         ],

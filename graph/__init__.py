@@ -8,11 +8,14 @@ from graph.builder import build_project_graph
 from graph.context import GraphContextManager
 from graph.models import GraphNode, ProjectGraph
 from graph.query import ProjectGraphQuery
+from graph.service import GraphRefreshResult, GraphService
 from graph.store import GraphStore
 
 __all__ = [
     "GraphContextManager",
     "GraphNode",
+    "GraphRefreshResult",
+    "GraphService",
     "GraphStore",
     "ProjectGraph",
     "ProjectGraphQuery",

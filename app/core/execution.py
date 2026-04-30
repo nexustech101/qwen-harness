@@ -39,6 +39,9 @@ class ExecutionEngine:
         self._validator = SchemaValidator(registry)
         self._client = ollama.Client(host=config.OLLAMA_HOST)
         self._files_modified: list[str] = []
+        self._graph_dirty_paths: list[str] = []
+        self._graph_preflight_done = False
+        self._graph_service = None
         self._messages: list[dict] = []  # live message buffer (exposed for API)
 
     def run(
@@ -76,6 +79,7 @@ class ExecutionEngine:
 
             tool_categories = self._select_tool_categories(state)
             tools_for_turn = self._registry.to_ollama_format(categories=tool_categories)
+            self._ensure_graph_ready()
 
             self._trace.emit(
                 "model_call",
@@ -427,6 +431,49 @@ class ExecutionEngine:
             p = args.get(key)
             if isinstance(p, str) and p and p not in self._files_modified:
                 self._files_modified.append(p)
+                if _is_graph_relevant_change(p):
+                    self._graph_dirty_paths.append(p)
+
+    def _ensure_graph_ready(self) -> None:
+        policy = getattr(config, "GRAPH_AUTO_REFRESH", "auto")
+        if policy == "off":
+            return
+        if self._graph_preflight_done and not self._graph_dirty_paths:
+            return
+        if self._graph_preflight_done and policy != "auto":
+            return
+
+        reason = "preflight" if not self._graph_preflight_done else "dirty"
+        try:
+            service = self._get_graph_service()
+            if self._graph_dirty_paths:
+                service.mark_dirty(self._graph_dirty_paths)
+            result = service.ensure_fresh(reason=reason)
+            self._trace.emit(
+                "graph_refresh",
+                reason=reason,
+                refreshed=result.refreshed,
+                file_count=result.file_count,
+                symbol_count=result.symbol_count,
+                edge_count=result.edge_count,
+            )
+            self._graph_dirty_paths = []
+            self._graph_preflight_done = True
+        except Exception as exc:
+            self._trace.emit("graph_refresh_skipped", reason=reason, error=str(exc))
+            self._graph_preflight_done = True
+
+    def _get_graph_service(self):
+        if self._graph_service is None:
+            from pathlib import Path
+
+            from app.core.workspace import Workspace
+            from graph.service import GraphService
+            from graph.store import GraphStore
+
+            ws = Workspace(project_root=Path.cwd())
+            self._graph_service = GraphService(GraphStore(ws.project_root, ws.graph_path(), ws.graph_context_path()))
+        return self._graph_service
 
 
 def _summarize_tool_result(name: str, result) -> str:
@@ -452,6 +499,19 @@ def _retrievable_metadata(name: str, arguments: dict) -> dict:
             "retrieval_args": arguments,
         }
     return {}
+
+
+def _is_graph_relevant_change(path: str) -> bool:
+    suffix = path.rsplit(".", 1)
+    if len(suffix) != 2:
+        return False
+    return f".{suffix[-1].lower()}" in {
+        ".py", ".ts", ".js", ".jsx", ".tsx", ".mjs", ".go", ".rs", ".java",
+        ".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".rb", ".swift", ".kt",
+        ".kts", ".cs", ".scala", ".php", ".lua", ".toc", ".zig", ".ps1",
+        ".ex", ".exs", ".m", ".mm", ".jl", ".vue", ".svelte", ".dart",
+        ".v", ".sv",
+    }
 
 
 def _tool_signature(calls: list[ToolCall]) -> str:

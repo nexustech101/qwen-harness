@@ -66,8 +66,9 @@ class ProjectGraphQuery:
                 continue
             haystack = f"{symbol.id} {symbol.name} {symbol.qualname} {symbol.path}".lower()
             if not needle or needle in haystack:
-                matches.append(self._compact_symbol(symbol))
-        return sorted(matches, key=lambda item: item["symbol_id"])[:limit]
+                score = _symbol_match_score(symbol, needle)
+                matches.append((score, self._compact_symbol(symbol)))
+        return [item for _score, item in sorted(matches, key=lambda row: (-row[0], row[1]["symbol_id"]))[:limit]]
 
     def symbol_details(self, symbol_id_or_query: str) -> dict:
         symbol = self._resolve_symbol(symbol_id_or_query)
@@ -181,7 +182,7 @@ class ProjectGraphQuery:
         if not src or not tgt:
             return {"found": False, "error": "source or target not found", "source": src, "target": tgt}
         try:
-            path = nx.shortest_path(G, src, tgt)
+            path = nx.shortest_path(G, src, tgt, weight=self._path_weight)
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return {"found": False, "source": src, "target": tgt, "path": []}
         hops = len(path) - 1
@@ -285,7 +286,12 @@ class ProjectGraphQuery:
             label = str(data.get("label") or node_id).lower()
             source = str(data.get("source_file") or "").lower()
             score = sum(1 for term in terms if term in label) + sum(0.5 for term in terms if term in source)
-            if score:
+            if node_id in self.graph.symbols:
+                score += 1.5
+            if any(term == node_id.lower() or term == label for term in terms):
+                score += 2.0
+            score -= _node_noise_penalty(node_id, data)
+            if score > 0:
                 scored.append((score, node_id))
         return sorted(scored, reverse=True)
 
@@ -355,6 +361,18 @@ class ProjectGraphQuery:
             output = output[:char_budget] + f"\n... (truncated to ~{token_budget} token budget)"
         return output
 
+    def _path_weight(self, source: str, target: str, data: dict) -> float:
+        G = self._networkx()
+        relation = str(data.get("relation", "")).lower()
+        weight = 1.0
+        if relation in {"calls", "imports", "contains"}:
+            weight -= 0.25
+        if relation in {"mentions", "rationale", "related"}:
+            weight += 1.0
+        weight += _node_noise_penalty(source, G.nodes[source])
+        weight += _node_noise_penalty(target, G.nodes[target])
+        return max(weight, 0.1)
+
     @staticmethod
     def _compact_symbol(symbol: SymbolNode | None) -> dict:
         if not symbol:
@@ -368,4 +386,37 @@ class ProjectGraphQuery:
             "line": symbol.line,
             "signature": symbol.signature,
         }
+
+
+def _symbol_match_score(symbol: SymbolNode, needle: str) -> float:
+    if not needle:
+        return 0
+    score = 0.0
+    if symbol.id.lower() == needle:
+        score += 8
+    if symbol.name.lower() == needle:
+        score += 6
+    if symbol.qualname.lower() == needle:
+        score += 5
+    if needle in symbol.path.lower():
+        score += 2
+    if needle in symbol.signature.lower():
+        score += 1
+    return score
+
+
+def _node_noise_penalty(node_id: str, data: dict) -> float:
+    label = str(data.get("label") or node_id).lower()
+    source = str(data.get("source_file") or "")
+    kind = str(data.get("kind") or "").lower()
+    penalty = 0.0
+    if not source:
+        penalty += 1.5
+    if kind in {"entity", "identifier", "literal"} and "::" not in node_id:
+        penalty += 0.75
+    if any(word in label for word in ("rationale", "docstring", "comment")):
+        penalty += 1.0
+    if label in {"str", "int", "dict", "list", "set", "tuple", "bool", "none"}:
+        penalty += 2.0
+    return penalty
 

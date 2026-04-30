@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.db.models import ChatMessage, ChatSession, LlmUsageEvent
+from api.db.models import ChatMessage, ChatSession, LLMUsageEvent
 
 
 class ConversationSessionPublic(BaseModel):
@@ -53,7 +53,7 @@ class ConversationMessagePublic(BaseModel):
         )
 
 
-class LlmUsageEventPublic(BaseModel):
+class LLMUsageEventPublic(BaseModel):
     id: int
     session_id: str | None = None
     user_id: int | None = None
@@ -62,7 +62,7 @@ class LlmUsageEventPublic(BaseModel):
     created_at: str
 
     @classmethod
-    def from_model(cls, event: LlmUsageEvent) -> "LlmUsageEventPublic":
+    def from_model(cls, event: LLMUsageEvent) -> "LLMUsageEventPublic":
         return cls(
             id=event.id or 0,
             session_id=event.session_id,
@@ -76,7 +76,7 @@ class LlmUsageEventPublic(BaseModel):
 class ConversationHistoryResponse(BaseModel):
     session: ConversationSessionPublic
     messages: list[ConversationMessagePublic] = Field(default_factory=list)
-    usage_events: list[LlmUsageEventPublic] = Field(default_factory=list)
+    usage_events: list[LLMUsageEventPublic] = Field(default_factory=list)
 
 
 class ConversationHistoryPage(BaseModel):

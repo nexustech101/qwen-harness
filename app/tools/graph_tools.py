@@ -9,22 +9,23 @@ from typing import Annotated
 from app.core.state import ToolResult
 from app.core.workspace import Workspace
 from app.tools.registry import registry
-from graph.context import GraphContextManager
 from graph.query import ProjectGraphQuery
+from graph.service import GraphService
 from graph.store import GraphStore
 
 
-def _store() -> GraphStore:
+def _service() -> GraphService:
     ws = Workspace(project_root=Path.cwd())
-    return GraphStore(ws.project_root, ws.graph_path(), ws.graph_context_path())
+    return GraphService(GraphStore(ws.project_root, ws.graph_path(), ws.graph_context_path()))
 
 
-def _query(refresh_if_missing: bool = True) -> tuple[GraphStore, ProjectGraphQuery]:
-    store = _store()
-    graph = store.load_or_refresh() if refresh_if_missing else store.load()
-    if graph is None:
-        graph = store.refresh()
-    return store, ProjectGraphQuery(graph)
+def _store() -> GraphStore:
+    return _service().store
+
+
+def _query() -> tuple[GraphStore, ProjectGraphQuery]:
+    service = _service()
+    return service.store, service.query()
 
 
 def _json(data) -> str:
@@ -34,7 +35,7 @@ def _json(data) -> str:
 @registry.tool(
     name="graph_refresh",
     category="graph",
-    description="Build or refresh the Python project graph in the central workspace",
+    description="Build or refresh the project graph in the central workspace",
     idempotent=True,
 )
 def graph_refresh(
@@ -42,19 +43,20 @@ def graph_refresh(
     exclude: Annotated[str, "Glob of Python files to exclude"] = "",
 ) -> ToolResult:
     try:
-        store = _store()
-        graph = store.refresh(include=include, exclude=exclude)
+        service = _service()
+        result = service.ensure_fresh(reason="tool", force=True, include=include, exclude=exclude)
         return ToolResult(
             success=True,
-            data=f"Graph refreshed: {len(graph.files)} files, {len(graph.symbols)} symbols, {len(graph.edges)} edges",
+            data=result.message,
             metadata={
-                "graph_updated_at": graph.generated_at,
-                "file_count": len(graph.files),
-                "symbol_count": len(graph.symbols),
-                "node_count": graph.metadata.get("node_count", len(graph.nodes) + len(graph.symbols)),
-                "edge_count": len(graph.edges),
-                "report_path": str(store.report_path()),
-                "networkx_path": str(store.networkx_path()),
+                "graph_updated_at": result.generated_at,
+                "file_count": result.file_count,
+                "symbol_count": result.symbol_count,
+                "node_count": result.node_count,
+                "edge_count": result.edge_count,
+                "report_path": result.report_path,
+                "networkx_path": result.networkx_path,
+                "refreshed": result.refreshed,
                 "retrievable": True,
             },
         )
@@ -96,12 +98,9 @@ def graph_summary(
 )
 def graph_report() -> ToolResult:
     try:
-        store, _graph_query = _query()
-        report_path = store.report_path()
-        if not report_path.exists():
-            store.refresh()
-        data = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
-        return ToolResult(success=True, data=data, metadata={"report_path": str(report_path), "retrievable": True})
+        service = _service()
+        data = service.report()
+        return ToolResult(success=True, data=data, metadata={"report_path": str(service.store.report_path()), "retrievable": True})
     except Exception as exc:
         return ToolResult(success=False, data="", error=f"Graph report failed: {exc}")
 
@@ -347,7 +346,7 @@ def graph_context_load(
     limit: Annotated[int, "Maximum symbols to load"] = 5,
 ) -> ToolResult:
     try:
-        manager = GraphContextManager(_store())
+        manager = _service().context()
         summary = manager.load(query, limit=limit)
         return ToolResult(success=True, data=_json(summary), metadata={"retrievable": True})
     except Exception as exc:
@@ -364,7 +363,7 @@ def graph_context_evict(
     symbol: Annotated[str, "Symbol id or search text to evict; empty evicts all"] = "",
 ) -> ToolResult:
     try:
-        manager = GraphContextManager(_store())
+        manager = _service().context()
         summary = manager.evict(symbol)
         return ToolResult(success=True, data=_json(summary), metadata={"retrievable": True})
     except Exception as exc:
@@ -379,7 +378,7 @@ def graph_context_evict(
 )
 def graph_context_budget() -> ToolResult:
     try:
-        manager = GraphContextManager(_store())
+        manager = _service().context()
         return ToolResult(success=True, data=_json(manager.budget_summary()), metadata={"retrievable": True})
     except Exception as exc:
         return ToolResult(success=False, data="", error=f"Graph context budget failed: {exc}")
@@ -393,7 +392,7 @@ def graph_context_budget() -> ToolResult:
 )
 def graph_prompt_context() -> ToolResult:
     try:
-        manager = GraphContextManager(_store())
+        manager = _service().context()
         return ToolResult(success=True, data=manager.prompt_context(), metadata={"retrievable": True})
     except Exception as exc:
         return ToolResult(success=False, data="", error=f"Graph prompt context failed: {exc}")

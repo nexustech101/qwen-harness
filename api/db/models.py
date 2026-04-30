@@ -5,18 +5,20 @@ import json
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
-from registers.db import database_registry, db_field, dispose_all
+from registers.db import db_field, dispose_all, DatabaseRegistry
 from sqlalchemy import text
 
 from api.config.config import get_settings
 from api.config.security import utc_now_iso
 
+db = DatabaseRegistry()
+
 settings = get_settings()
-DB_URL = settings.database_url
+USER_DATABASE_URL = settings.database_url
 
 
-@database_registry(
-    DB_URL,
+@db.database_registry(
+    USER_DATABASE_URL,
     table_name="users",
     key_field="id",
     unique_fields=["email"],
@@ -34,8 +36,8 @@ class User(BaseModel):
     last_login_at: str | None = None
 
 
-@database_registry(
-    DB_URL,
+@db.database_registry(
+    USER_DATABASE_URL,
     table_name="refresh_sessions",
     key_field="id",
     unique_fields=["token_jti"],
@@ -49,7 +51,7 @@ class RefreshSession(BaseModel):
     revoked_at: str | None = None
 
 
-@database_registry(DB_URL, table_name="auth_events", key_field="id")
+@db.database_registry(USER_DATABASE_URL, table_name="auth_events", key_field="id")
 class AuthEvent(BaseModel):
     id: int | None = None
     user_id: int | None = db_field(index=True, foreign_key="users.id", default=None)
@@ -63,8 +65,8 @@ class AuthEvent(BaseModel):
     created_at: str = db_field(index=True)
 
 
-@database_registry(
-    DB_URL,
+@db.database_registry(
+    USER_DATABASE_URL,
     table_name="billing_accounts",
     key_field="id",
     unique_fields=["user_id", "stripe_customer_id"],
@@ -82,8 +84,8 @@ class BillingAccount(BaseModel):
     updated_at: str
 
 
-@database_registry(
-    DB_URL,
+@db.database_registry(
+    USER_DATABASE_URL,
     table_name="schema_migrations",
     key_field="id",
     unique_fields=["version"],
@@ -96,8 +98,8 @@ class SchemaMigration(BaseModel):
     details: str | None = None
 
 
-@database_registry(
-    DB_URL,
+@db.database_registry(
+    USER_DATABASE_URL,
     table_name="chat_sessions",
     key_field="id",
 )
@@ -115,8 +117,8 @@ class ChatSession(BaseModel):
     last_activity_at: str = db_field(index=True)
 
 
-@database_registry(
-    DB_URL,
+@db.database_registry(
+    USER_DATABASE_URL,
     table_name="chat_messages",
     key_field="id",
 )
@@ -131,12 +133,12 @@ class ChatMessage(BaseModel):
     created_at: str
 
 
-@database_registry(
-    DB_URL,
+@db.database_registry(
+    USER_DATABASE_URL,
     table_name="llm_usage_events",
     key_field="id",
 )
-class LlmUsageEvent(BaseModel):
+class LLMUsageEvent(BaseModel):
     id: int | None = None
     session_id: str | None = db_field(index=True, foreign_key="chat_sessions.id", default=None)
     user_id: int | None = db_field(index=True, foreign_key="users.id", default=None)
@@ -153,7 +155,7 @@ ALL_MODELS = [
     SchemaMigration,
     ChatSession,
     ChatMessage,
-    LlmUsageEvent,
+    LLMUsageEvent,
 ]
 
 
@@ -221,7 +223,7 @@ def _migration_7() -> None:
         _ensure_index(ChatSession, "chat_sessions", column)
 
     ChatMessage.objects.ensure_column("metadata", dict, nullable=True)
-    LlmUsageEvent.objects.ensure_column("payload", dict, nullable=True)
+    LLMUsageEvent.objects.ensure_column("payload", dict, nullable=True)
 
     if "metadata_json" in ChatMessage.objects.column_names():
         with ChatMessage.objects.transaction() as conn:
@@ -231,13 +233,13 @@ def _migration_7() -> None:
             if metadata is not None:
                 _update_json_column(ChatMessage, row["id"], "metadata", metadata)
 
-    if "payload_json" in LlmUsageEvent.objects.column_names():
-        with LlmUsageEvent.objects.transaction() as conn:
+    if "payload_json" in LLMUsageEvent.objects.column_names():
+        with LLMUsageEvent.objects.transaction() as conn:
             rows = conn.execute(text("SELECT id, payload_json FROM llm_usage_events WHERE payload_json IS NOT NULL")).mappings().all()
         for row in rows:
             payload = _json_or_none(row["payload_json"])
             if payload is not None:
-                _update_json_column(LlmUsageEvent, row["id"], "payload", payload)
+                _update_json_column(LLMUsageEvent, row["id"], "payload", payload)
 
 
 MIGRATIONS: list[tuple[int, str, Callable[[], None]]] = [

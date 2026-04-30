@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 import networkx as nx
 from networkx.readwrite import json_graph
+from graph.service import GraphService
+from graph.store import GraphStore
 from graph.security import sanitize_label
 
 
@@ -147,7 +149,7 @@ def _filter_blank_stdin() -> None:
     sys.stdin = open(0, "r", closefd=False)
 
 
-def serve(graph_path: str = ".graph-out/graph.json") -> None:
+def serve(graph_path: str = ".") -> None:
     """Start the MCP server. Requires pip install mcp."""
     try:
         from mcp.server import Server
@@ -156,14 +158,46 @@ def serve(graph_path: str = ".graph-out/graph.json") -> None:
     except ImportError as e:
         raise ImportError("mcp not installed. Run: pip install mcp") from e
 
-    G = _load_graph(graph_path)
-    communities = _communities_from_graph(G)
+    service = _service_from_target(graph_path)
 
     server = Server("graphify")
 
     @server.list_tools()
     async def list_tools() -> list[types.Tool]:
         return [
+            types.Tool(
+                name="refresh_if_stale",
+                description="Refresh the project graph only when source files changed.",
+                inputSchema={"type": "object", "properties": {"force": {"type": "boolean", "default": False}}},
+            ),
+            types.Tool(
+                name="summary",
+                description="Return compact graph architecture stats and top symbols.",
+                inputSchema={"type": "object", "properties": {"limit": {"type": "integer", "default": 10}}},
+            ),
+            types.Tool(
+                name="report",
+                description="Return the current graph report.",
+                inputSchema={"type": "object", "properties": {}},
+            ),
+            types.Tool(
+                name="find",
+                description="Find code symbols by name, qualified name, path, or ID.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "kind": {"type": "string", "default": ""},
+                        "limit": {"type": "integer", "default": 20},
+                    },
+                    "required": ["query"],
+                },
+            ),
+            types.Tool(
+                name="details",
+                description="Return symbol details, callers, callees, and children.",
+                inputSchema={"type": "object", "properties": {"symbol": {"type": "string"}}, "required": ["symbol"]},
+            ),
             types.Tool(
                 name="query_graph",
                 description="Search the knowledge graph using BFS or DFS. Returns relevant nodes and edges as text context.",
@@ -178,6 +212,33 @@ def serve(graph_path: str = ".graph-out/graph.json") -> None:
                     },
                     "required": ["question"],
                 },
+            ),
+            types.Tool(
+                name="context_load",
+                description="Load compact symbol context into the graph context manager.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer", "default": 5},
+                    },
+                    "required": ["query"],
+                },
+            ),
+            types.Tool(
+                name="context_budget",
+                description="Return loaded graph-context token budget.",
+                inputSchema={"type": "object", "properties": {}},
+            ),
+            types.Tool(
+                name="context_prompt",
+                description="Render loaded graph context as prompt-ready text.",
+                inputSchema={"type": "object", "properties": {}},
+            ),
+            types.Tool(
+                name="context_evict",
+                description="Evict matching graph context, or all context when query is empty.",
+                inputSchema={"type": "object", "properties": {"query": {"type": "string", "default": ""}}},
             ),
             types.Tool(
                 name="get_node",
@@ -234,111 +295,80 @@ def serve(graph_path: str = ".graph-out/graph.json") -> None:
             ),
         ]
 
+    def _tool_refresh_if_stale(arguments: dict) -> str:
+        return json.dumps(service.ensure_fresh(reason="mcp", force=bool(arguments.get("force", False))).to_dict(), indent=2)
+
+    def _tool_summary(arguments: dict) -> str:
+        return json.dumps(service.query().architecture_report(limit=int(arguments.get("limit", 10))), indent=2)
+
+    def _tool_report(_: dict) -> str:
+        return service.report()
+
+    def _tool_find(arguments: dict) -> str:
+        rows = service.query().find_symbol(
+            arguments["query"],
+            kind=arguments.get("kind", ""),
+            limit=int(arguments.get("limit", 20)),
+        )
+        return json.dumps(rows, indent=2)
+
+    def _tool_details(arguments: dict) -> str:
+        return json.dumps(service.query().symbol_details(arguments["symbol"]), indent=2)
+
     def _tool_query_graph(arguments: dict) -> str:
-        question = arguments["question"]
-        mode = arguments.get("mode", "bfs")
-        depth = min(int(arguments.get("depth", 3)), 6)
-        budget = int(arguments.get("token_budget", 2000))
-        terms = [t.lower() for t in question.split() if len(t) > 2]
-        scored = _score_nodes(G, terms)
-        start_nodes = [nid for _, nid in scored[:3]]
-        if not start_nodes:
-            return "No matching nodes found."
-        nodes, edges = _dfs(G, start_nodes, depth) if mode == "dfs" else _bfs(G, start_nodes, depth)
-        header = f"Traversal: {mode.upper()} depth={depth} | Start: {[G.nodes[n].get('label', n) for n in start_nodes]} | {len(nodes)} nodes found\n\n"
-        return header + _subgraph_to_text(G, nodes, edges, budget)
+        return service.query().query_graph(
+            arguments["question"],
+            mode=arguments.get("mode", "bfs"),
+            depth=min(int(arguments.get("depth", 3)), 6),
+            token_budget=int(arguments.get("token_budget", 2000)),
+        )
 
     def _tool_get_node(arguments: dict) -> str:
-        label = arguments["label"].lower()
-        matches = [(nid, d) for nid, d in G.nodes(data=True)
-                   if label in (d.get("label") or "").lower() or label == nid.lower()]
-        if not matches:
-            return f"No node matching '{label}' found."
-        nid, d = matches[0]
-        return "\n".join([
-            f"Node: {d.get('label', nid)}",
-            f"  ID: {nid}",
-            f"  Source: {d.get('source_file', '')} {d.get('source_location', '')}",
-            f"  Type: {d.get('file_type', '')}",
-            f"  Community: {d.get('community', '')}",
-            f"  Degree: {G.degree(nid)}",
-        ])
+        details = service.query().symbol_details(arguments["label"])
+        return json.dumps(details, indent=2) if details else f"No node matching '{arguments['label']}' found."
 
     def _tool_get_neighbors(arguments: dict) -> str:
-        label = arguments["label"].lower()
-        rel_filter = arguments.get("relation_filter", "").lower()
-        matches = _find_node(G, label)
-        if not matches:
-            return f"No node matching '{label}' found."
-        nid = matches[0]
-        lines = [f"Neighbors of {G.nodes[nid].get('label', nid)}:"]
-        for neighbor in G.neighbors(nid):
-            d = G.edges[nid, neighbor]
-            rel = d.get("relation", "")
-            if rel_filter and rel_filter not in rel.lower():
-                continue
-            lines.append(f"  --> {G.nodes[neighbor].get('label', neighbor)} [{rel}] [{d.get('confidence', '')}]")
-        return "\n".join(lines)
+        return json.dumps(
+            service.query().neighbors(arguments["label"], relation_filter=arguments.get("relation_filter", "")),
+            indent=2,
+        )
 
     def _tool_get_community(arguments: dict) -> str:
-        cid = int(arguments["community_id"])
-        nodes = communities.get(cid, [])
-        if not nodes:
-            return f"Community {cid} not found."
-        lines = [f"Community {cid} ({len(nodes)} nodes):"]
-        for n in nodes:
-            d = G.nodes[n]
-            lines.append(f"  {d.get('label', n)} [{d.get('source_file', '')}]")
-        return "\n".join(lines)
+        return json.dumps(service.query().community(int(arguments["community_id"])), indent=2)
 
     def _tool_god_nodes(arguments: dict) -> str:
-        from .analyze import god_nodes as _god_nodes
-        nodes = _god_nodes(G, top_n=int(arguments.get("top_n", 10)))
-        lines = ["God nodes (most connected):"]
+        nodes = service.query().graph.metadata.get("god_nodes", [])[: int(arguments.get("top_n", 10))]
+        lines = ["God nodes:"]
         lines += [f"  {i}. {n['label']} - {n['degree']} edges" for i, n in enumerate(nodes, 1)]
         return "\n".join(lines)
 
     def _tool_graph_stats(_: dict) -> str:
-        confs = [d.get("confidence", "EXTRACTED") for _, _, d in G.edges(data=True)]
-        total = len(confs) or 1
-        return (
-            f"Nodes: {G.number_of_nodes()}\n"
-            f"Edges: {G.number_of_edges()}\n"
-            f"Communities: {len(communities)}\n"
-            f"EXTRACTED: {round(confs.count('EXTRACTED')/total*100)}%\n"
-            f"INFERRED: {round(confs.count('INFERRED')/total*100)}%\n"
-            f"AMBIGUOUS: {round(confs.count('AMBIGUOUS')/total*100)}%\n"
-        )
+        return json.dumps(service.stats(), indent=2)
 
     def _tool_shortest_path(arguments: dict) -> str:
-        src_scored = _score_nodes(G, [t.lower() for t in arguments["source"].split()])
-        tgt_scored = _score_nodes(G, [t.lower() for t in arguments["target"].split()])
-        if not src_scored:
-            return f"No node matching source '{arguments['source']}' found."
-        if not tgt_scored:
-            return f"No node matching target '{arguments['target']}' found."
-        src_nid, tgt_nid = src_scored[0][1], tgt_scored[0][1]
-        max_hops = int(arguments.get("max_hops", 8))
-        try:
-            path_nodes = nx.shortest_path(G, src_nid, tgt_nid)
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            return f"No path found between '{G.nodes[src_nid].get('label', src_nid)}' and '{G.nodes[tgt_nid].get('label', tgt_nid)}'."
-        hops = len(path_nodes) - 1
-        if hops > max_hops:
-            return f"Path exceeds max_hops={max_hops} ({hops} hops found)."
-        segments = []
-        for i in range(len(path_nodes) - 1):
-            u, v = path_nodes[i], path_nodes[i + 1]
-            edata = G.edges[u, v]
-            rel = edata.get("relation", "")
-            conf = edata.get("confidence", "")
-            conf_str = f" [{conf}]" if conf else ""
-            if i == 0:
-                segments.append(G.nodes[u].get("label", u))
-            segments.append(f"--{rel}{conf_str}--> {G.nodes[v].get('label', v)}")
-        return f"Shortest path ({hops} hops):\n  " + " ".join(segments)
+        return json.dumps(
+            service.query().shortest_path(arguments["source"], arguments["target"], max_hops=int(arguments.get("max_hops", 8))),
+            indent=2,
+        )
+
+    def _tool_context_load(arguments: dict) -> str:
+        return json.dumps(service.context().load(arguments["query"], limit=int(arguments.get("limit", 5))), indent=2)
+
+    def _tool_context_budget(_: dict) -> str:
+        return json.dumps(service.context().budget_summary(), indent=2)
+
+    def _tool_context_prompt(_: dict) -> str:
+        return service.context().prompt_context()
+
+    def _tool_context_evict(arguments: dict) -> str:
+        return json.dumps(service.context().evict(arguments.get("query", "")), indent=2)
 
     _handlers = {
+        "refresh_if_stale": _tool_refresh_if_stale,
+        "summary": _tool_summary,
+        "report": _tool_report,
+        "find": _tool_find,
+        "details": _tool_details,
         "query_graph": _tool_query_graph,
         "get_node": _tool_get_node,
         "get_neighbors": _tool_get_neighbors,
@@ -346,6 +376,10 @@ def serve(graph_path: str = ".graph-out/graph.json") -> None:
         "god_nodes": _tool_god_nodes,
         "graph_stats": _tool_graph_stats,
         "shortest_path": _tool_shortest_path,
+        "context_load": _tool_context_load,
+        "context_budget": _tool_context_budget,
+        "context_prompt": _tool_context_prompt,
+        "context_evict": _tool_context_evict,
     }
 
     @server.call_tool()
@@ -368,7 +402,19 @@ def serve(graph_path: str = ".graph-out/graph.json") -> None:
     asyncio.run(main())
 
 
+def _service_from_target(target: str) -> GraphService:
+    path = Path(target or ".").resolve()
+    if path.suffix == ".json":
+        graph_path = path
+        out = graph_path.parent
+        root = out.parent if out.name == ".graph-out" else Path.cwd().resolve()
+        context_path = out / "project_graph_context.json"
+        return GraphService(GraphStore(root, graph_path, context_path))
+    out = path / ".graph-out"
+    return GraphService(GraphStore(path, out / "project_graph.json", out / "project_graph_context.json"))
+
+
 if __name__ == "__main__":
-    graph_path = sys.argv[1] if len(sys.argv) > 1 else ".graph-out/graph.json"
+    graph_path = sys.argv[1] if len(sys.argv) > 1 else "."
     serve(graph_path)
 

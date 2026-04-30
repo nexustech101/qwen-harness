@@ -15,7 +15,7 @@ from app import config
 from app.core.execution import ExecutionEngine
 from app.core.state import SubAgentResult, TaskSpec
 from app.core.workspace import Workspace
-from app.logging.console_renderer import ConsoleRenderer
+from app.core.console_renderer import ConsoleRenderer
 from app.logging.trace import Trace, TraceEvent
 from app.logging import file_logger
 from app.prompts.system_prompts import sub_agent_prompt

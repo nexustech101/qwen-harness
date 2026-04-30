@@ -6,9 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from graph.context import GraphContextManager
-from graph.query import ProjectGraphQuery
-from graph.store import GraphStore
+from graph.service import GraphService
 
 COMMANDS = {
     "refresh",
@@ -24,17 +22,23 @@ COMMANDS = {
     "stats",
     "report",
     "context",
+    "serve",
+    "mcp",
 }
 
 
 def main() -> None:
     root, argv = _split_root(sys.argv[1:])
-    store = _store(root.resolve())
+    service = GraphService.for_project(root.resolve())
 
-    if not argv or argv[0].startswith("--"):
+    if not argv or argv[0] in {"--help", "-h", "help"}:
+        _print(_usage_text())
+        return
+
+    if argv and argv[0].startswith("--"):
         find = _option_value(argv, "--find")
-        graph = store.refresh()
-        query = ProjectGraphQuery(graph)
+        service.ensure_fresh(reason="legacy", force=True)
+        query = service.query()
         print(query.skeleton(max_files=80))
         print()
         print(_json(query.architecture_report(limit=8)))
@@ -48,13 +52,18 @@ def main() -> None:
         _usage(f"unknown command: {command}")
 
     if command == "refresh":
-        graph = store.refresh()
-        print(f"Graph refreshed: {len(graph.files)} Python files, {len(graph.symbols)} symbols, {len(graph.edges)} edges")
-        print(f"Report: {store.report_path()}")
+        result = service.ensure_fresh(reason="cli", force=True)
+        print(result.message)
+        print(f"Report: {result.report_path}")
         return
 
-    graph = store.load_or_refresh()
-    query = ProjectGraphQuery(graph)
+    if command in {"serve", "mcp"}:
+        from graph.serve import serve
+
+        serve(str(root.resolve()))
+        return
+
+    query = service.query()
 
     if command == "summary":
         print(_json(query.architecture_report()))
@@ -80,16 +89,24 @@ def main() -> None:
     elif command == "stats":
         print(_json(query.graph_stats()))
     elif command == "report":
-        report = store.report_path()
-        print(report.read_text(encoding="utf-8") if report.exists() else "No graph report found. Run `graphify refresh`.")
+        _print(service.report() or "No graph report found. Run `graphify refresh`.")
     elif command == "context":
         if not rest:
             _usage("context requires load|budget|prompt|evict")
-        manager = GraphContextManager(store)
+        manager = service.context()
         action = rest[0]
-        argument = " ".join(rest[1:])
+        argument_parts = rest[1:]
+        limit = 5
+        if "--limit" in argument_parts:
+            idx = argument_parts.index("--limit")
+            try:
+                limit = int(argument_parts[idx + 1])
+            except (IndexError, ValueError):
+                _usage("context --limit requires an integer")
+            del argument_parts[idx:idx + 2]
+        argument = " ".join(argument_parts)
         if action == "load":
-            print(_json(manager.load(argument)))
+            print(_json(manager.load(argument, limit=limit)))
         elif action == "budget":
             print(_json(manager.budget_summary()))
         elif action == "prompt":
@@ -104,11 +121,6 @@ def _split_root(argv: list[str]) -> tuple[Path, list[str]]:
     if argv and argv[0] not in COMMANDS and not argv[0].startswith("--"):
         return Path(argv[0]), argv[1:]
     return Path("."), argv
-
-
-def _store(root: Path) -> GraphStore:
-    out = root / ".graph-out"
-    return GraphStore(root, out / "project_graph.json", out / "project_graph_context.json")
 
 
 def _option_value(argv: list[str], name: str) -> str:
@@ -126,12 +138,38 @@ def _required(argv: list[str], label: str) -> str:
 
 def _usage(error: str) -> str:
     print(f"error: {error}", file=sys.stderr)
-    print("usage: graphify [ROOT] [refresh|summary|find|details|usages|hierarchy|related|query|path|explain|stats|report|context]", file=sys.stderr)
+    print(_usage_text(), file=sys.stderr)
     raise SystemExit(2)
 
 
 def _json(data) -> str:
     return json.dumps(data, indent=2, ensure_ascii=True)
+
+
+def _usage_text() -> str:
+    return (
+        "usage: graphify [ROOT] "
+        "[refresh|summary|find|details|usages|hierarchy|related|query|path|explain|stats|report|context|serve|mcp]\n"
+        "\n"
+        "examples:\n"
+        "  graphify refresh\n"
+        "  graphify summary\n"
+        "  graphify find ExecutionEngine\n"
+        "  graphify context load ExecutionEngine --limit 3\n"
+        "  graphify mcp\n"
+    )
+
+
+def _print(text: str) -> None:
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stdout.write(text)
+        if not text.endswith("\n"):
+            sys.stdout.write("\n")
+    except UnicodeEncodeError:
+        encoding = sys.stdout.encoding or "utf-8"
+        sys.stdout.buffer.write((text + ("\n" if not text.endswith("\n") else "")).encode(encoding, errors="replace"))
 
 
 if __name__ == "__main__":
