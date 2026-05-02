@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
-
-from registers.cli import CommandRegistry
 from cli.commands.billing import cli as billing_cli
 from cli.commands.ops import cli as ops_cli
 from cli.commands.sessions import cli as sessions_cli
 from cli.commands.users import cli as users_cli
-from registers.db import RecordNotFoundError
+
+from registers.cli import CommandRegistry
 
 
 registry = CommandRegistry()
@@ -20,21 +18,16 @@ except Exception as exc:
     raise SystemError(f"Failed to load CLI plugins: {exc}")
 
 
-def main(argv: list[str] | None = None, print_result: bool = True):
+def main() -> None:
     try:
         return registry.run(
-            argv,
-            print_result=print_result,
+            print_result=True,
             shell_title="User Account Admin CLI",
             shell_description="Manage user accounts and auth sessions.",
             shell_usage=True,
         )
-    except RecordNotFoundError as exc:
-        payload = {"error": "not_found", "detail": str(exc)}
-        if print_result:
-            print(json.dumps(payload, indent=2, sort_keys=True))
-            return None
-        return json.dumps(payload, indent=2, sort_keys=True)
+    except Exception as exc:
+        raise SystemError(f"CLI execution failed: {exc}") from exc
 
 
 if __name__ == "__main__":
