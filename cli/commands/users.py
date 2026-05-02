@@ -4,12 +4,14 @@ import json
 from typing import Any
 
 import registers.cli as cli
+from registers.cli import CommandRegistry
 
 from cli.bootstrap import bootstrap
 from api.schemas import UserUpdate
 from api.services.user_service import create_user, get_user_by_id, list_users, update_user
 from api.services.auth_service import revoke_all_user_sessions
 
+cli = CommandRegistry()
 
 def _to_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
@@ -20,7 +22,7 @@ def _to_json(payload: dict[str, Any]) -> str:
 @cli.argument("password", type=str, help="Plain text password")
 @cli.argument("full_name", type=str, default="", help="Display name")
 @cli.argument("is_admin", type=bool, default=False, help="Grant admin privileges")
-@cli.option("--create-user")
+@cli.alias("--create-user")
 def create_user_command(email: str, password: str, full_name: str = "", is_admin: bool = False) -> str:
     bootstrap()
     name = full_name or email.split("@", maxsplit=1)[0]
@@ -41,7 +43,7 @@ def create_user_command(email: str, password: str, full_name: str = "", is_admin
 @cli.argument("limit", type=int, default=25, help="Page size")
 @cli.argument("offset", type=int, default=0, help="Offset")
 @cli.argument("is_active", type=str, default="all", help="Filter: all|true|false")
-@cli.option("--list-users")
+@cli.alias("--list-users")
 def list_users_command(limit: int = 25, offset: int = 0, is_active: str = "all") -> str:
     bootstrap()
     filter_value: bool | None
@@ -83,7 +85,7 @@ def list_users_command(limit: int = 25, offset: int = 0, is_active: str = "all")
 @cli.register(name="set-password", description="Set a new password for a user")
 @cli.argument("user_id", type=int, help="User ID")
 @cli.argument("new_password", type=str, help="New plain-text password")
-@cli.option("--set-password")
+@cli.alias("--set-password")
 def set_password_command(user_id: int, new_password: str) -> str:
     bootstrap()
     user = get_user_by_id(user_id)
@@ -94,7 +96,7 @@ def set_password_command(user_id: int, new_password: str) -> str:
 
 @cli.register(name="deactivate-user", description="Deactivate a user account")
 @cli.argument("user_id", type=int, help="User ID")
-@cli.option("--deactivate-user")
+@cli.alias("--deactivate-user")
 def deactivate_user_command(user_id: int) -> str:
     bootstrap()
     user = update_user(user_id, UserUpdate(is_active=False), is_admin_actor=True)
@@ -111,7 +113,7 @@ def deactivate_user_command(user_id: int) -> str:
 
 @cli.register(name="activate-user", description="Activate a user account")
 @cli.argument("user_id", type=int, help="User ID")
-@cli.option("--activate-user")
+@cli.alias("--activate-user")
 def activate_user_command(user_id: int) -> str:
     bootstrap()
     user = update_user(user_id, UserUpdate(is_active=True), is_admin_actor=True)
@@ -120,7 +122,7 @@ def activate_user_command(user_id: int) -> str:
 
 @cli.register(name="promote-admin", description="Promote a user to admin")
 @cli.argument("user_id", type=int, help="User ID")
-@cli.option("--promote-admin")
+@cli.alias("--promote-admin")
 def promote_admin_command(user_id: int) -> str:
     bootstrap()
     user = update_user(user_id, UserUpdate(is_admin=True), is_admin_actor=True)

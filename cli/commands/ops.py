@@ -3,18 +3,19 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import registers.cli as cli
+from registers.cli import CommandRegistry
 
 from cli.bootstrap import bootstrap
 from api.services.ops_service import get_schema_metadata, list_auth_events
 
+cli = CommandRegistry()
 
 def _to_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
 @cli.register(name="schema-meta", description="Show migration and schema metadata")
-@cli.option("--schema-meta")
+@cli.alias("--schema-meta")
 def schema_meta_command() -> str:
     bootstrap()
     metadata = get_schema_metadata()
@@ -42,7 +43,7 @@ def schema_meta_command() -> str:
 @cli.argument("action", type=str, default="", help="Action filter")
 @cli.argument("email", type=str, default="", help="Email filter")
 @cli.argument("success", type=str, default="all", help="Filter: all|true|false")
-@cli.option("--audit-events")
+@cli.alias("--audit-events")
 def audit_events_command(
     limit: int = 25,
     offset: int = 0,

@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from api.core.config import Settings
+from api.config.config import Settings
 
 logger = logging.getLogger("user_api.firebase")
 

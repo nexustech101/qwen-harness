@@ -2,15 +2,27 @@ from __future__ import annotations
 
 import json
 
-import registers.cli as cli
+from registers.cli import CommandRegistry
+from cli.commands.billing import cli as billing_cli
+from cli.commands.ops import cli as ops_cli
+from cli.commands.sessions import cli as sessions_cli
+from cli.commands.users import cli as users_cli
 from registers.db import RecordNotFoundError
 
-from . import commands  # noqa: F401
+
+registry = CommandRegistry()
+try:
+    registry.register_plugin(billing_cli)
+    registry.register_plugin(users_cli)
+    registry.register_plugin(ops_cli)
+    registry.register_plugin(sessions_cli)
+except Exception as exc:
+    raise SystemError(f"Failed to load CLI plugins: {exc}")
 
 
 def main(argv: list[str] | None = None, print_result: bool = True):
     try:
-        return cli.run(
+        return registry.run(
             argv,
             print_result=print_result,
             shell_title="User Account Admin CLI",

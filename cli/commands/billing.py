@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import registers.cli as cli
+from registers.cli import CommandRegistry
 
 from cli.bootstrap import bootstrap
 from api.schemas.billing import ACCESS_GRANTING_STATUSES
@@ -16,6 +16,9 @@ from api.services.billing_service import (
     sync_subscription_for_user,
 )
 from api.services.user_service import get_user_by_id
+
+
+cli = CommandRegistry()
 
 
 def _to_json(payload: dict[str, Any]) -> str:
@@ -44,7 +47,7 @@ def _billing_error(action: str, user_id: int, detail: str, code: str = "billing_
 
 @cli.register(name="billing-status", description="Show local billing state for a user")
 @cli.argument("user_id", type=int, help="User ID")
-@cli.option("--billing-status")
+@cli.alias("--billing-status")
 def billing_status_command(user_id: int) -> str:
     bootstrap()
     account = get_billing_account_for_user(user_id)
@@ -56,7 +59,7 @@ def billing_status_command(user_id: int) -> str:
 @cli.register(name="billing-create-checkout", description="Create a Stripe Checkout session for a user")
 @cli.argument("user_id", type=int, help="User ID")
 @cli.argument("price_id", type=str, default="", help="Optional Stripe Price ID override")
-@cli.option("--billing-create-checkout")
+@cli.alias("--billing-create-checkout")
 def billing_create_checkout_command(user_id: int, price_id: str = "") -> str:
     bootstrap()
     user = get_user_by_id(user_id)
@@ -71,7 +74,7 @@ def billing_create_checkout_command(user_id: int, price_id: str = "") -> str:
 
 @cli.register(name="billing-create-portal", description="Create a Stripe Billing Portal session for a user")
 @cli.argument("user_id", type=int, help="User ID")
-@cli.option("--billing-create-portal")
+@cli.alias("--billing-create-portal")
 def billing_create_portal_command(user_id: int) -> str:
     bootstrap()
     user = get_user_by_id(user_id)
@@ -86,7 +89,7 @@ def billing_create_portal_command(user_id: int) -> str:
 
 @cli.register(name="billing-sync", description="Sync local subscription status for a user from Stripe")
 @cli.argument("user_id", type=int, help="User ID")
-@cli.option("--billing-sync")
+@cli.alias("--billing-sync")
 def billing_sync_command(user_id: int) -> str:
     bootstrap()
     user = get_user_by_id(user_id)

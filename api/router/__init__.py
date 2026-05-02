@@ -8,7 +8,7 @@ from registers.db import InvalidQueryError, RecordNotFoundError, RegistryError, 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from api.router.error_handlers import (
+from api.modules.error_handlers import (
     invalid_query_handler,
     not_found_handler,
     registry_error_handler,
@@ -19,7 +19,7 @@ from api.router.rate_limit import limiter, settings
 from api.router.routes import build_api_router
 from api.modules.dependencies import run_db
 from api.router.routes.ws import router as ws_router
-from api.core.logging import configure_logging
+from api.config.logging import configure_logging
 from api.db.models import dispose_database, initialize_database
 from api.integrations.firebase import initialize_firebase
 
