@@ -1,202 +1,270 @@
+"""
+Chat service — streaming Ollama execution loop with MCP tool dispatch.
+
+`run_session_turn` is the single entry point:
+  - streams tokens from Ollama
+  - dispatches tool calls via the api/tools/ registry
+  - broadcasts TraceEvent-style dicts to the session's WS queues
+  - persists messages to the database
+"""
+
 from __future__ import annotations
 
-from typing import Any
+import json
+import time
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator
 
-from registers.db import RecordNotFoundError
+import ollama
 
-from api.config.security import utc_now_iso
-from api.db.models import ChatMessage, ChatSession, LLMUsageEvent
+from api.config.config import get_settings
+from api.db.models import ChatMessage, ChatSession
+from api.modules.session_manager import Session
+from api.services.response_parser import StreamingParser, parse_response
+from api.tools.registry import registry
+
+# Ensure all tool implementations are loaded
+import api.tools.file_tools       # noqa: F401
+import api.tools.system_tools     # noqa: F401
+import api.tools.code_tools       # noqa: F401
+import api.tools.analysis_tools   # noqa: F401
+import api.tools.workspace_tools  # noqa: F401
+import api.tools.web_tools        # noqa: F401
+
+settings = get_settings()
 
 
-def _now() -> str:
-    return utc_now_iso()
+class _TextFn:
+    """Fake function object for tool calls emitted as JSON text."""
+    __slots__ = ("name", "arguments")
+
+    def __init__(self, name: str, arguments: dict) -> None:
+        self.name = name
+        self.arguments = arguments
 
 
-def upsert_chat_session(
-    session_id: str,
-    user_id: int,
-    project_root: str,
-    project_name: str | None,
-    workspace_key: str | None,
-    workspace_root: str | None,
-    model: str,
-    status: str = "idle",
-) -> ChatSession:
-    now = _now()
+class _TextTC:
+    """Fake tool-call object for tool calls emitted as JSON text."""
+    __slots__ = ("function",)
+
+    def __init__(self, name: str, arguments: dict) -> None:
+        self.function = _TextFn(name, arguments)
+
+
+def _parse_text_tool_calls(content: str) -> list[_TextTC]:
+    """Return mock TCs if *content* is a JSON-formatted tool call or list thereof."""
+    stripped = content.strip()
+    if not stripped or stripped[0] not in ("{", "["):
+        return []
     try:
-        session = ChatSession.objects.require(id=session_id)
-        if session.user_id != user_id:
-            raise PermissionError("Chat session does not belong to this user")
-        session.project_root = project_root
-        session.project_name = project_name
-        session.workspace_key = workspace_key
-        session.workspace_root = workspace_root
-        session.model = model
-        session.status = status
-        session.updated_at = now
-        session.last_activity_at = now
-        session.save()
-        return session
-    except RecordNotFoundError:
-        return ChatSession.objects.create(
-            id=session_id,
-            user_id=user_id,
-            project_root=project_root,
-            project_name=project_name,
-            workspace_key=workspace_key,
-            workspace_root=workspace_root,
-            model=model,
-            status=status,
-            created_at=now,
-            updated_at=now,
-            last_activity_at=now,
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
+        return [_TextTC(parsed["name"], parsed["arguments"])]
+    if isinstance(parsed, list) and all(
+        isinstance(p, dict) and "name" in p and "arguments" in p for p in parsed
+    ):
+        return [_TextTC(p["name"], p["arguments"]) for p in parsed]
+    return []
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+# ── DB helpers ─────────────────────────────────────────────────────────────────
+
+def persist_session(session: Session) -> None:
+    """Upsert a ChatSession row from an in-memory Session."""
+    now = _utc_now()
+    if ChatSession.schema_exists():
+        try:
+            row = ChatSession.objects.require(id=session.id)
+            row.title = session.title
+            row.model = session.model
+            row.status = session.status
+            row.updated_at = now
+            row.save()
+        except Exception:
+            ChatSession.objects.create(
+                id=session.id,
+                title=session.title,
+                model=session.model,
+                status=session.status,
+                created_at=session.created_at,
+                updated_at=now,
+            )
+
+
+def persist_message(session_id: str, role: str, content: str, metadata: dict[str, Any] | None = None) -> None:
+    if ChatMessage.schema_exists():
+        ChatMessage.objects.create(
+            session_id=session_id,
+            role=role,
+            content=content,
+            metadata=json.dumps(metadata) if metadata else None,
+            created_at=_utc_now(),
         )
 
 
-def get_chat_session_for_user(session_id: str, user_id: int) -> ChatSession:
-    session = ChatSession.objects.require(id=session_id)
-    if session.user_id != user_id:
-        raise PermissionError("Chat session access denied")
-    return session
+def load_messages(session_id: str) -> list[dict[str, Any]]:
+    """Return stored messages as Ollama-compatible dicts."""
+    if not ChatMessage.schema_exists():
+        return []
+    rows = ChatMessage.objects.filter(session_id=session_id, order_by="id")
+    return [{"role": row.role, "content": row.content} for row in rows]
 
 
-def list_chat_sessions_for_user(user_id: int, limit: int = 25, offset: int = 0) -> tuple[list[ChatSession], int]:
-    rows = ChatSession.objects.filter(
-        user_id=user_id,
-        order_by="-last_activity_at",
-        limit=limit,
-        offset=offset,
-    )
-    total = ChatSession.objects.count(user_id=user_id)
-    return rows, total
+def list_sessions() -> list[ChatSession]:
+    if not ChatSession.schema_exists():
+        return []
+    return ChatSession.objects.filter(order_by="-created_at")
 
 
-def append_chat_message(
-    session_id: str,
-    user_id: int,
-    role: str,
-    content: str,
-    metadata: dict[str, Any] | None = None,
-    agent_name: str | None = None,
-) -> ChatMessage:
-    session = get_chat_session_for_user(session_id, user_id)
-    now = _now()
-    msg = ChatMessage.objects.create(
-        session_id=session.id,
-        user_id=user_id,
-        role=role,
-        content=content,
-        agent_name=agent_name,
-        metadata=metadata or None,
-        created_at=now,
-    )
-    session.last_activity_at = now
-    session.updated_at = now
-    session.save()
-    record_usage_event(
-        event_type="conversation.message_created",
-        session_id=session.id,
-        user_id=user_id,
-        payload={
-            "message_id": msg.id,
-            "role": role,
-            "agent_name": agent_name,
-            "content_length": len(content),
-            "metadata": metadata or {},
-        },
-    )
-    return msg
+def get_session(session_id: str) -> ChatSession | None:
+    if not ChatSession.schema_exists():
+        return None
+    try:
+        return ChatSession.objects.require(id=session_id)
+    except Exception:
+        return None
 
 
-def list_chat_messages_for_user(session_id: str, user_id: int) -> list[ChatMessage]:
-    _ = get_chat_session_for_user(session_id, user_id)
-    return ChatMessage.objects.filter(session_id=session_id, order_by="id")
+def delete_session(session_id: str) -> bool:
+    if not ChatSession.schema_exists():
+        return False
+    try:
+        ChatMessage.objects.delete_where(session_id=session_id)
+        ChatSession.objects.delete(session_id)
+        return True
+    except Exception:
+        return False
 
 
-def delete_chat_session_for_user(session_id: str, user_id: int) -> bool:
-    _ = get_chat_session_for_user(session_id, user_id)
-    ChatMessage.objects.delete_where(session_id=session_id)
-    ChatSession.objects.delete(session_id)
-    return True
+# ── Tool schema helpers ────────────────────────────────────────────────────────
+
+def _build_tools_list() -> list[dict[str, Any]]:
+    """Convert the tool registry into Ollama's tools format."""
+    return registry.to_ollama_format()
 
 
-def set_chat_session_status(session_id: str, user_id: int, status: str) -> ChatSession:
-    session = get_chat_session_for_user(session_id, user_id)
-    now = _now()
-    session.status = status
-    session.updated_at = now
-    session.last_activity_at = now
-    session.save()
-    return session
+# ── Core streaming loop ────────────────────────────────────────────────────────
 
+async def run_session_turn(
+    session: Session,
+    prompt: str,
+) -> AsyncIterator[dict[str, Any]]:
+    """
+    Run one user turn on *session*, yielding TraceEvent-style dicts.
 
-def record_usage_event(
-    event_type: str,
-    session_id: str | None = None,
-    user_id: int | None = None,
-    payload: dict[str, Any] | None = None,
-) -> LLMUsageEvent:
-    return LLMUsageEvent.objects.create(
-        session_id=session_id,
-        user_id=user_id,
-        event_type=event_type,
-        payload=payload or None,
-        created_at=_now(),
-    )
+    Callers should iterate and broadcast each event to WS queues as well
+    as send them over HTTP/SSE.
+    """
+    client = ollama.AsyncClient(host=settings.ollama_host)
+    tools_list = _build_tools_list()
 
+    # Build message list: history + new user message
+    messages = list(session.history)
+    user_msg: dict[str, Any] = {"role": "user", "content": prompt}
+    messages.append(user_msg)
+    session.history.append(user_msg)
+    persist_message(session.id, "user", prompt)
 
-def list_usage_events_for_session(session_id: str, user_id: int | None = None) -> list[LLMUsageEvent]:
-    filters: dict[str, Any] = {"session_id": session_id}
-    if user_id is not None:
-        filters["user_id"] = user_id
-    return LLMUsageEvent.objects.filter(order_by="id", **filters)
+    yield {"type": "turn_start", "session_id": session.id, "model": session.model}
 
+    session.status = "running"
 
-def get_conversation_history_for_user(session_id: str, user_id: int) -> dict[str, Any]:
-    session = get_chat_session_for_user(session_id, user_id)
-    return {
-        "session": session,
-        "messages": list_chat_messages_for_user(session_id, user_id),
-        "usage_events": list_usage_events_for_session(session_id, user_id),
+    t_start = time.monotonic()
+    max_tool_rounds = 10  # prevent infinite tool loops
+    streaming_parser = StreamingParser()
+
+    for _round in range(max_tool_rounds):
+        # ── Stream assistant response ──────────────────────────────────────────
+        accumulated_content = ""
+        tool_calls_raw: list[Any] = []
+
+        async for chunk in await client.chat(
+            model=session.model,
+            messages=messages,
+            tools=tools_list,
+            stream=True,
+        ):
+            msg = chunk.message
+
+            # Accumulate streamed text and classify thinking vs. content
+            if msg.content:
+                accumulated_content += msg.content
+                for kind, delta in streaming_parser.feed(msg.content):
+                    yield {"type": "thinking" if kind == "thinking" else "token", "delta": delta}
+
+            # Collect tool calls (may arrive in last chunk)
+            if msg.tool_calls:
+                tool_calls_raw.extend(msg.tool_calls)
+
+        # Flush any partial lookahead buffer at end of each streaming round
+        for kind, delta in streaming_parser.flush():
+            yield {"type": "thinking" if kind == "thinking" else "token", "delta": delta}
+
+        # --- Detect text-format tool calls (models that emit JSON as content) ---
+        if not tool_calls_raw:
+            text_tcs = _parse_text_tool_calls(accumulated_content)
+            if text_tcs:
+                tool_calls_raw = text_tcs
+                accumulated_content = ""
+                yield {"type": "clear_content"}
+
+        # Add assistant message to history
+        assistant_msg: dict[str, Any] = {"role": "assistant", "content": accumulated_content}
+        if tool_calls_raw:
+            assistant_msg["tool_calls"] = [
+                {"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in tool_calls_raw
+            ]
+        messages.append(assistant_msg)
+        session.history.append(assistant_msg)
+        persist_message(session.id, "assistant", accumulated_content)
+
+        if not tool_calls_raw:
+            # No tools — we're done with this turn
+            break
+
+        # ── Execute tool calls ─────────────────────────────────────────────────
+        for tc in tool_calls_raw:
+            tool_name: str = tc.function.name
+            tool_args: dict[str, Any] = (
+                tc.function.arguments
+                if isinstance(tc.function.arguments, dict)
+                else {}
+            )
+
+            yield {"type": "tool_call", "name": tool_name, "args": tool_args}
+
+            try:
+                result = registry.execute(tool_name, tool_args)
+                output = str(result.data) if result.success else f"Error: {result.error}"
+                success = result.success
+            except Exception as exc:
+                output = f"Tool error: {exc}"
+                success = False
+
+            yield {"type": "tool_result", "name": tool_name, "success": success, "output": output}
+
+            tool_msg: dict[str, Any] = {"role": "tool", "content": output}
+            messages.append(tool_msg)
+            session.history.append(tool_msg)
+            persist_message(session.id, "tool", output, metadata={"tool": tool_name, "success": success})
+
+    elapsed = time.monotonic() - t_start
+    session.status = "idle"
+    session.updated_at = _utc_now()
+    persist_session(session)
+
+    # Parse the final assistant message for structured metadata
+    parsed = parse_response(accumulated_content)
+    yield {
+        "type": "turn_done",
+        "elapsed_seconds": round(elapsed, 3),
+        "has_thinking": parsed.has_thinking,
+        "thinking_chars": len(parsed.thinking),
     }
-
-
-def list_conversation_histories(
-    *,
-    limit: int,
-    offset: int,
-    user_id: int | None = None,
-    session_id: str | None = None,
-    status: str | None = None,
-    model: str | None = None,
-    project_name: str | None = None,
-    created_after: str | None = None,
-    created_before: str | None = None,
-) -> tuple[list[dict[str, Any]], int]:
-    filters: dict[str, Any] = {}
-    if user_id is not None:
-        filters["user_id"] = user_id
-    if session_id:
-        filters["id"] = session_id
-    if status:
-        filters["status"] = status
-    if model:
-        filters["model"] = model
-    if project_name:
-        filters["project_name"] = project_name
-    if created_after:
-        filters["created_at__gte"] = created_after
-    if created_before:
-        filters["created_at__lte"] = created_before
-
-    sessions = ChatSession.objects.filter(order_by="-last_activity_at", limit=limit, offset=offset, **filters)
-    total = ChatSession.objects.count(**filters)
-    histories = [
-        {
-            "session": session,
-            "messages": ChatMessage.objects.filter(session_id=session.id, order_by="id"),
-            "usage_events": list_usage_events_for_session(session.id, session.user_id),
-        }
-        for session in sessions
-    ]
-    return histories, total

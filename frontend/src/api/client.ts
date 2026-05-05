@@ -233,6 +233,50 @@ export const api = {
       ),
   },
 
+  workflows: {
+    list: () => request<import("./types").WorkflowResponse[]>("/api/workflows"),
+
+    get: (id: string) =>
+      request<import("./types").WorkflowResponse>(`/api/workflows/${encodeURIComponent(id)}`),
+
+    create: (body: {
+      name: string
+      description?: string
+      definition?: import("./types").WorkflowDefinition
+      enabled?: boolean
+    }) =>
+      request<import("./types").WorkflowResponse>("/api/workflows", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
+    update: (
+      id: string,
+      body: Partial<{
+        name: string
+        description: string
+        definition: import("./types").WorkflowDefinition
+        enabled: boolean
+      }>,
+    ) =>
+      request<import("./types").WorkflowResponse>(`/api/workflows/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+
+    delete: (id: string) =>
+      request<void>(`/api/workflows/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+    execute: (id: string) =>
+      request<import("./types").WorkflowExecuteResponse>(
+        `/api/workflows/${encodeURIComponent(id)}/execute`,
+        { method: "POST" },
+      ),
+
+    runs: (id: string) =>
+      request<import("./types").WorkflowRunResponse[]>(`/api/workflows/${encodeURIComponent(id)}/runs`),
+  },
+
   uploads: {
     stage: async (sessionId: string, files: File[]): Promise<import("./types").UploadResponse> => {
       const form = new FormData()

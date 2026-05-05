@@ -1,5 +1,7 @@
 import { create } from "zustand"
 
+type ActiveView = "chat" | "workflows" | "mcp" | "settings"
+
 interface UIStore {
   theme: "light" | "dark"
   sidebarOpen: boolean
@@ -8,6 +10,8 @@ interface UIStore {
   selectedFile: string | null
   activeSessionId: string | null
   selectedModel: string | null
+  activeView: ActiveView
+  activeWorkflowId: string | null
   toggleTheme: () => void
   toggleSidebar: () => void
   toggleRightPanel: () => void
@@ -17,6 +21,8 @@ interface UIStore {
   setSelectedFile: (path: string | null) => void
   setActiveSession: (id: string | null) => void
   setSelectedModel: (model: string | null) => void
+  setActiveView: (view: ActiveView) => void
+  setActiveWorkflow: (id: string | null) => void
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -27,6 +33,8 @@ export const useUIStore = create<UIStore>((set) => ({
   selectedFile: null,
   activeSessionId: null,
   selectedModel: null,
+  activeView: "chat",
+  activeWorkflowId: null,
 
   toggleTheme: () =>
     set((s) => {
@@ -43,4 +51,7 @@ export const useUIStore = create<UIStore>((set) => ({
   setSelectedFile: (path) => set({ selectedFile: path }),
   setActiveSession: (id) => set({ activeSessionId: id, selectedAgent: null, selectedFile: null }),
   setSelectedModel: (model) => set({ selectedModel: model }),
+  setActiveView: (view) => set({ activeView: view }),
+  setActiveWorkflow: (id) => set({ activeWorkflowId: id }),
 }))
+

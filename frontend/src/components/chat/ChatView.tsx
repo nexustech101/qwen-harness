@@ -2,12 +2,9 @@ import { useRef, useEffect, useState, useMemo } from "react"
 import { ChatMessage, ActivityGroup } from "./ChatMessage"
 import { StreamingMessage } from "./StreamingMessage"
 import { PromptInput } from "./PromptInput"
-import { RobotLogo } from "@/components/branding/RobotLogo"
-import { NewSessionDialog } from "@/components/session/NewSessionDialog"
 import { useMessages, useSession } from "@/api/queries"
 import { useWSStore } from "@/stores/websocket"
 import { useUIStore } from "@/stores/ui"
-import { useAuthStore } from "@/stores/auth"
 import { useUploadStore } from "@/stores/uploads"
 import type { ChatItem } from "@/api/types"
 
@@ -47,7 +44,6 @@ export function ChatView() {
   const activeSessionId = useUIStore((s) => s.activeSessionId)
   const { data: session } = useSession(activeSessionId)
   const { data: messages } = useMessages(activeSessionId)
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const clearUploads = useUploadStore((s) => s.clearAll)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -81,22 +77,14 @@ export function ChatView() {
 
   const isEmpty = chatItems.length === 0 && !streaming
   const groups = useMemo(() => groupChatItems(chatItems), [chatItems])
-  const showGuestNotice = isAuthenticated && session?.persistence_mode === "guest"
 
   return (
     <div className="flex h-full flex-col">
       {isEmpty ? (
-        /* ── Welcome screen (Grok-style centered) ────────────────────── */
+        /* ── Welcome screen ───────────────────────────────────────────── */
         <div className="flex flex-1 flex-col items-center justify-center px-4">
-          <RobotLogo size={72} className="text-blue-400 mb-6" />
-          <h1 className="text-2xl font-semibold mb-1">Qwen Coder</h1>
+          <h1 className="text-2xl font-semibold mb-1">Coding Agent</h1>
           <p className="text-muted-foreground text-sm mb-10">How can I help you today?</p>
-          {showGuestNotice && (
-            <div className="mb-4 flex items-center gap-3 rounded-lg border border-border/50 bg-card/60 px-3 py-2 text-xs text-muted-foreground">
-              <span>This chat is temporary.</span>
-              <NewSessionDialog label="Start new saved chat" />
-            </div>
-          )}
           <div className="w-full max-w-2xl">
             <PromptInput centered />
           </div>
@@ -105,13 +93,7 @@ export function ChatView() {
         /* ── Chat messages ───────────────────────────────────────────── */
         <>
           <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
-            <div className="mx-auto max-w-3xl space-y-3 px-4 py-4">
-              {showGuestNotice && (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-card/60 px-3 py-2 text-xs text-muted-foreground">
-                  <span>This chat is temporary.</span>
-                  <NewSessionDialog label="Start new saved chat" />
-                </div>
-              )}
+            <div className="mx-auto max-w-3xl space-y-1 px-4 py-6">
               {groups.map((g, i) =>
                 g.kind === "content" ? (
                   <ChatMessage key={i} item={g.item} />

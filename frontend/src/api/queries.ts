@@ -168,3 +168,69 @@ export function usePortalSession() {
     mutationFn: api.billing.portalSession,
   })
 }
+
+// ── Workflow queries ──────────────────────────────────────────────────────────
+
+export function useWorkflows() {
+  return useQuery({
+    queryKey: ["workflows"],
+    queryFn: api.workflows.list,
+    staleTime: 10_000,
+  })
+}
+
+export function useWorkflow(id: string | null) {
+  return useQuery({
+    queryKey: ["workflow", id],
+    queryFn: () => api.workflows.get(id!),
+    enabled: !!id,
+    staleTime: 5_000,
+  })
+}
+
+export function useCreateWorkflow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.workflows.create>[0]) => api.workflows.create(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
+  })
+}
+
+export function useUpdateWorkflow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Parameters<typeof api.workflows.update>[1]) =>
+      api.workflows.update(id, body),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["workflows"] })
+      qc.invalidateQueries({ queryKey: ["workflow", vars.id] })
+    },
+  })
+}
+
+export function useDeleteWorkflow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.workflows.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
+  })
+}
+
+export function useExecuteWorkflow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.workflows.execute(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["workflow-runs", id] })
+    },
+  })
+}
+
+export function useWorkflowRuns(workflowId: string | null) {
+  return useQuery({
+    queryKey: ["workflow-runs", workflowId],
+    queryFn: () => api.workflows.runs(workflowId!),
+    enabled: !!workflowId,
+    refetchInterval: 5_000,
+  })
+}

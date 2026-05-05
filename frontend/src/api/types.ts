@@ -202,6 +202,55 @@ export interface UploadResponse {
   uploads: UploadMeta[]
 }
 
+// ── Workflow types ─────────────────────────────────────────────────────────────
+
+export interface WorkflowStep {
+  id: string
+  type: "prompt"
+  title: string
+  prompt: string
+  model?: string
+  x: number
+  y: number
+}
+
+export interface WorkflowEdge {
+  id: string
+  source: string
+  target: string
+}
+
+export interface WorkflowDefinition {
+  steps: WorkflowStep[]
+  edges: WorkflowEdge[]
+  interval_seconds?: number | null
+}
+
+export interface WorkflowResponse {
+  id: string
+  name: string
+  description: string
+  definition: WorkflowDefinition
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface WorkflowRunResponse {
+  id: string
+  workflow_id: string
+  status: "pending" | "running" | "done" | "error"
+  result: Record<string, unknown> | null
+  started_at: string
+  finished_at: string | null
+}
+
+export interface WorkflowExecuteResponse {
+  run_id: string
+  session_id: string
+  steps: Array<{ id: string; title: string; prompt: string }>
+}
+
 // WebSocket event types
 export interface WSEvent {
   type: string
