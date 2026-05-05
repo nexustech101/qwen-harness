@@ -70,7 +70,6 @@ graph-all = [
 qwen-coder = "app.__main__:main"
 # qwen-coder-capture = "app.scripts.capture_model_formats:main"
 graphify = "graph.__main__:main"
-agent-admin = "cli.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["app*", "graph*", "cli*", "api*"]
