@@ -4,17 +4,21 @@ State dataclasses for the agent system.
 Pure data structures with no dependencies on other modules.
 """
 
+# @TODO: I don't want sub-agent execution anymore since I decided to go with a more practical approach 
+# with locally hosted models that are quantized. It's more pragmatic to have a single executor agent 
+# for managing MCP functions/tool calls (e.g. email MCP, blog post MCP, web scraping MCP, etc.)
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+# from dataclasses import dataclass, field  # Revert back to this if there are any erros in pydantic models
+from pydantic import BaseModel, Field
 import uuid
 
-
-@dataclass
-class ToolCall:
+# I'll be using FastMCP for agent tools, so this might be redefined (or phased out more likely).
+class ToolCall(BaseModel):
     """Canonical internal representation of a requested tool call."""
     name: str
-    arguments: dict = field(default_factory=dict)
+    arguments: dict = Field(default_factory=dict)
     call_id: str = ""
 
     def ensure_call_id(self) -> "ToolCall":
@@ -22,13 +26,12 @@ class ToolCall:
             self.call_id = uuid.uuid4().hex[:12]
         return self
 
-
-@dataclass
-class ToolResult:
+# Same as above ^^^
+class ToolResult(BaseModel):
     """Result returned by every tool execution."""
     success: bool
     data: str
-    metadata: dict = field(default_factory=dict)
+    metadata: dict = Field(default_factory=dict)
     error: str | None = None
     summary: str = ""
 
@@ -44,9 +47,8 @@ class ToolResult:
             "metadata": self.metadata,
         }
 
-
-@dataclass
-class TurnState:
+# This is probably fine to keep (we'll see)
+class TurnState(BaseModel):
     """State for a single turn in the agent loop."""
     turn_number: int
     phase: str = "PLANNING"
@@ -54,63 +56,58 @@ class TurnState:
     parsed_tools: list[ToolCall] | None = None
     parsed_reasoning: str | None = None
     parsed_response: str | None = None
-    tool_results: list[ToolResult] = field(default_factory=list)
+    tool_results: list[ToolResult] = Field(default_factory=list)
     error: str | None = None
     retry_count: int = 0
 
-
-@dataclass
-class AgentState:
+# Keep this too
+class AgentState(BaseModel):
     """Persistent state across the entire agent run."""
     total_turns: int = 0
     max_turns: int = 15
-    tool_call_history: list[ToolCall] = field(default_factory=list)
+    tool_call_history: list[ToolCall] = Field(default_factory=list)
     phase: str = "discover"  # discover -> modify -> verify
 
-
-@dataclass
-class AgentResult:
+# And this one ^^^
+class AgentResult(BaseModel):
     """Final output from an agent run."""
     result: str | None
     turns: int
     reason: str  # "done", "max_turns", "deadlock", "error"
     tool_calls_made: int = 0
-    files_modified: list[str] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
+    files_modified: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
     elapsed_seconds: float = 0.0
 
-
-@dataclass
-class ParseResult:
+# ^^^
+class ParseResult(BaseModel):
     """Output from the response parser."""
     mode: str  # "native", "structured", "legacy", "array", "plain"
-    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_calls: list[ToolCall] = Field(default_factory=list)
     reasoning: str = ""
     response: str = ""
     status: str = ""
-    diagnostics: dict = field(default_factory=dict)
+    diagnostics: dict = Field(default_factory=dict)
     raw_content: str = ""
 
-
-@dataclass
-class ValidationResult:
+# ^^^
+class ValidationResult(BaseModel):
     """Output from tool call validation."""
     valid: bool
-    errors: list[str] = field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
     schema_mismatch: bool = False
 
-
-@dataclass
-class TaskSpec:
+# This is the model that will be heavily scrutinized since the agent harness scope is changing to a more deterministic execution workflow using the LLM as the executor/orchestrator (through MCP definitions)
+class TaskSpec(BaseModel):
     """Specification for a sub-agent task, used as the contract between orchestrator and sub-agent."""
     task_id: str
     goal: str
     agent_name: str = ""
-    file_paths: list[str] = field(default_factory=list)
-    constraints: list[str] = field(default_factory=list)
-    acceptance_criteria: list[str] = field(default_factory=list)
-    allowed_tools: list[str] = field(default_factory=list)
-    depends_on: list[str] = field(default_factory=list)
+    file_paths: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    allowed_tools: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
     predecessor: str = ""  # name of a previous agent whose context to inherit
     directives: str = ""
     expected_status: str = "completed"
@@ -135,16 +132,15 @@ class TaskSpec:
             lines.append(self.directives)
         return "\n".join(lines)
 
-
-@dataclass
-class SubAgentResult:
+# Definitely depricate this since I'm moving away from sub-agents and instead having a single executor agent that handles all MCP functions/tool calls. The TaskSpec can still be useful as a data structure for defining MCP tasks, but the SubAgentResult is too specific to the previous sub-agent execution model.
+class SubAgentResult(BaseModel):
     """Result returned by a sub-agent execution."""
     success: bool
     output: str
     task_id: str = ""
     agent_name: str = ""
-    files_created: list[str] = field(default_factory=list)
-    files_modified: list[str] = field(default_factory=list)
+    files_created: list[str] = Field(default_factory=list)
+    files_modified: list[str] = Field(default_factory=list)
     summary: str = ""
     turns_used: int = 0
-    errors: list[str] = field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
