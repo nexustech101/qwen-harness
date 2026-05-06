@@ -311,7 +311,11 @@ async def _stream_turn(
 
             elif etype == "token":
                 content_buf += event.get("delta", "")
-                live.update(_render())
+                # Suppress live rendering when response looks like a raw JSON
+                # tool call — prevents long JSON from scrolling into the
+                # terminal's scrollback buffer where it cannot be erased.
+                if not content_buf.lstrip().startswith("{"):
+                    live.update(_render())
 
             elif etype == "clear_content":
                 content_buf = ""
@@ -332,7 +336,8 @@ async def _stream_turn(
                 console.print(f"  [dim]{icon} {name}: {summary}[/dim]")
 
             elif etype == "turn_done":
-                live.update(_render(done=True))
+                # Clear the live area; full render happens below outside Live
+                live.update(Text(""))
                 break
 
             elif etype == "error":
@@ -340,6 +345,14 @@ async def _stream_turn(
                 console.print(f"[red]Error: {event.get('detail', 'unknown')}[/red]")
                 return
 
+    # Render the final response outside Live so it is never height-clipped.
+    # Skip content that looks like a raw JSON tool call — if _parse_text_tool_calls
+    # detected it, content_buf was already cleared via clear_content; if it
+    # somehow wasn't detected we still don't want raw JSON printed to the user.
+    if thinking_buf:
+        console.print(Text(f"◦ thought for {len(thinking_buf):,} chars", style="dim italic"))
+    if content_buf and not content_buf.lstrip().startswith("{"):
+        console.print(Markdown(content_buf))
     console.print()
 
 

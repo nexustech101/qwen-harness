@@ -52,21 +52,46 @@ class _TextTC:
 
 
 def _parse_text_tool_calls(content: str) -> list[_TextTC]:
-    """Return mock TCs if *content* is a JSON-formatted tool call or list thereof."""
+    """Return mock TCs if *content* contains a JSON-formatted tool call.
+
+    Handles two cases:
+    1. Entire (stripped) content is a JSON tool call or list of tool calls.
+    2. Content has preamble text (e.g. a filename) followed by a JSON object.
+    """
     stripped = content.strip()
-    if not stripped or stripped[0] not in ("{", "["):
+    if not stripped:
         return []
-    try:
-        parsed = json.loads(stripped)
-    except json.JSONDecodeError:
-        return []
-    if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
-        return [_TextTC(parsed["name"], parsed["arguments"])]
-    if isinstance(parsed, list) and all(
-        isinstance(p, dict) and "name" in p and "arguments" in p for p in parsed
-    ):
-        return [_TextTC(p["name"], p["arguments"]) for p in parsed]
-    return []
+
+    # Fast path: entire content is JSON
+    if stripped[0] in ("{", "["):
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
+        else:
+            if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
+                return [_TextTC(parsed["name"], parsed["arguments"])]
+            if isinstance(parsed, list) and all(
+                isinstance(p, dict) and "name" in p and "arguments" in p for p in parsed
+            ):
+                return [_TextTC(p["name"], p["arguments"]) for p in parsed]
+
+    # Slow path: scan for ALL embedded JSON tool call objects
+    decoder = json.JSONDecoder()
+    results: list[_TextTC] = []
+    pos = 0
+    while pos < len(content):
+        brace = content.find("{", pos)
+        if brace == -1:
+            break
+        try:
+            obj, end_pos = decoder.raw_decode(content, brace)
+            if isinstance(obj, dict) and "name" in obj and "arguments" in obj:
+                results.append(_TextTC(obj["name"], obj["arguments"]))
+            pos = end_pos
+        except (json.JSONDecodeError, ValueError):
+            pos = brace + 1
+    return results
 
 
 def _utc_now() -> str:
