@@ -84,9 +84,10 @@ async def get_session_endpoint(session_id: str) -> dict[str, Any]:
 
 @router.delete("/sessions/{session_id}", status_code=204)
 async def delete_session_endpoint(session_id: str) -> None:
-    if not manager.delete(session_id):
+    # Remove from memory if loaded; don't 404 if not in memory — it may only be in DB.
+    manager.delete(session_id)
+    if not delete_session(session_id):
         raise HTTPException(404, "Session not found")
-    delete_session(session_id)
 
 
 # ── Message endpoints ──────────────────────────────────────────────────────────
@@ -110,14 +111,20 @@ async def send_prompt(session_id: str, req: SendPromptRequest) -> StreamingRespo
     if session.status == "running":
         raise HTTPException(409, "Session is already running")
 
-    prompt = req.prompt
+    original_prompt = req.prompt
+    inlined_prompt = req.prompt
     if req.attachment_ids:
-        prompt, _images = session.resolve_attachments(prompt, req.attachment_ids)
+        inlined_prompt, _images = session.resolve_attachments(inlined_prompt, req.attachment_ids)
 
     import json as _json
 
     async def _stream():
-        async for event in run_session_turn(session, prompt):
+        async for event in run_session_turn(
+            session,
+            inlined_prompt,
+            original_prompt=original_prompt,
+            attachment_ids=req.attachment_ids,
+        ):
             session.broadcast(event)
             yield f"data: {_json.dumps(event)}\n\n"
 

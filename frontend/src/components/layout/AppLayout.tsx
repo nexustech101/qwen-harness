@@ -1,3 +1,4 @@
+import { useRef, useState, useCallback, useEffect } from "react"
 import { MessageSquare, GitBranch, Plug, Settings, PanelLeft, Sun, Moon } from "lucide-react"
 import { StatusBar } from "./StatusBar"
 import { Sidebar } from "@/components/sidebar/Sidebar"
@@ -7,6 +8,11 @@ import { MCPView } from "@/components/mcp/MCPView"
 import { SettingsView } from "@/components/settings/SettingsView"
 import { useUIStore } from "@/stores/ui"
 import { cn } from "@/lib/utils"
+
+const SIDEBAR_MIN = 160
+const SIDEBAR_MAX = 480
+const SIDEBAR_DEFAULT = 220
+const SIDEBAR_STORAGE_KEY = "sidebar-width"
 
 const NAV_ITEMS = [
   { view: "chat" as const, icon: MessageSquare, label: "Chat" },
@@ -70,20 +76,69 @@ function NavRail() {
 export function AppLayout() {
   const { activeSessionId, activeView, sidebarOpen } = useUIStore()
 
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    return stored ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, parseInt(stored, 10))) : SIDEBAR_DEFAULT
+  })
+  const dragging = useRef(false)
+  const startX = useRef(0)
+  const startWidth = useRef(0)
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    dragging.current = true
+    startX.current = e.clientX
+    startWidth.current = sidebarWidth
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current) return
+      const delta = e.clientX - startX.current
+      const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startWidth.current + delta))
+      setSidebarWidth(next)
+    }
+    const onUp = () => {
+      if (!dragging.current) return
+      dragging.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+      setSidebarWidth((w) => {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(w))
+        return w
+      })
+    }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+    return () => {
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+    }
+  }, [])
+
   return (
     <div className="flex h-screen flex-col bg-background">
       <div className="flex flex-1 overflow-hidden">
         {/* Always-visible nav rail */}
         <NavRail />
 
-        {/* Collapsible sidebar */}
+        {/* Collapsible + resizable sidebar */}
         <div
           className={cn(
-            "flex flex-col shrink-0 overflow-hidden border-r border-border/30 bg-sidebar transition-[width] duration-200 ease-in-out",
-            sidebarOpen ? "w-60" : "w-0",
+            "relative flex flex-col shrink-0 overflow-hidden border-r border-border/30 bg-sidebar",
+            sidebarOpen ? "" : "w-0",
           )}
+          style={sidebarOpen ? { width: sidebarWidth } : undefined}
         >
           <Sidebar />
+          {/* Drag handle */}
+          {sidebarOpen && (
+            <div
+              onMouseDown={onMouseDown}
+              className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-ring/40 active:bg-ring/60 transition-colors z-10"
+            />
+          )}
         </div>
 
         {/* Main content area */}

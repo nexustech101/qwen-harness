@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { ChatItem, MessageResponse, WSEvent } from "@/api/types"
+import type { AttachmentRef, ChatItem, MessageResponse, WSEvent } from "@/api/types"
 import { getAuthToken } from "@/api/client"
 import { useUIStore } from "@/stores/ui"
 import { formatAssistantContent } from "@/lib/chat-format"
@@ -39,7 +39,7 @@ interface WSStore {
   connect: (sessionId: string) => void
   disconnect: () => void
   cancel: () => void
-  addUserMessage: (content: string) => void
+  addUserMessage: (content: string, attachments?: AttachmentRef[]) => void
   hydrateMessages: (sessionId: string, messages: MessageResponse[]) => void
   clearChat: () => void
 }
@@ -158,11 +158,11 @@ export const useWSStore = create<WSStore>((set, get) => ({
     }
   },
 
-  addUserMessage: (content: string) => {
+  addUserMessage: (content: string, attachments?: AttachmentRef[]) => {
     set((s) => ({
       chatItems: [
         ...s.chatItems,
-        { type: "user" as const, content, timestamp: Date.now() / 1000 },
+        { type: "user" as const, content, timestamp: Date.now() / 1000, attachments },
       ],
     }))
   },
@@ -174,7 +174,7 @@ export const useWSStore = create<WSStore>((set, get) => ({
       .map((message): ChatItem | null => {
         const timestamp = message.timestamp ?? Date.now() / 1000
         if (message.role === "user") {
-          return { type: "user", content: message.content, timestamp }
+          return { type: "user", content: message.content, timestamp, attachments: message.metadata?.attachments }
         }
         if (message.role === "assistant" || message.role === "system") {
           return {

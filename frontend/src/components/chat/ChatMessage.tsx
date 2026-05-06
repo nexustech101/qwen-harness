@@ -1,14 +1,14 @@
 ﻿import { useCallback, useState } from "react"
-import { AlertCircle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2 } from "lucide-react"
+import { AlertCircle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, FileText, Loader2 } from "lucide-react"
 import { cn, formatTime } from "@/lib/utils"
 import { formatAssistantContent, formatToolResult } from "@/lib/chat-format"
 import { MarkdownContent } from "./MarkdownContent"
-import type { ChatItem } from "@/api/types"
+import type { AttachmentRef, ChatItem } from "@/api/types"
 
 export function ChatMessage({ item }: { item: ChatItem }) {
   switch (item.type) {
     case "user":
-      return <UserBubble content={item.content} />
+      return <UserBubble content={item.content} attachments={item.attachments} />
     case "assistant":
       return <AssistantBubble content={item.content} metadata={item.metadata} />
     case "reasoning":
@@ -38,10 +38,38 @@ export function ChatMessage({ item }: { item: ChatItem }) {
 
 // â”€â”€ User bubble (right-aligned) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function UserBubble({ content }: { content: string }) {
+function GhostAttachmentChip({ attachment }: { attachment: AttachmentRef }) {
+  const isImage = attachment.mime_type.startsWith("image/")
+  const ext = attachment.filename.split(".").pop()?.toUpperCase() ?? ""
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/10 px-2 py-1"
+      title={`${attachment.filename} · ${(attachment.size / 1024).toFixed(1)} KB`}
+    >
+      {isImage ? (
+        <span className="text-[10px] leading-none">🖼</span>
+      ) : (
+        <FileText className="h-3 w-3 shrink-0 text-white/50" />
+      )}
+      <span className="max-w-[120px] truncate text-[11px] text-white/70">{attachment.filename}</span>
+      {ext && !isImage && (
+        <span className="rounded bg-white/10 px-1 text-[9px] font-bold text-white/50">{ext}</span>
+      )}
+    </div>
+  )
+}
+
+function UserBubble({ content, attachments }: { content: string; attachments?: AttachmentRef[] }) {
   return (
     <div className="flex justify-end px-1 py-0.5">
       <div className="max-w-[75%] rounded-2xl rounded-tr-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
+        {attachments && attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {attachments.map((a, i) => (
+              <GhostAttachmentChip key={i} attachment={a} />
+            ))}
+          </div>
+        )}
         <p className="whitespace-pre-wrap leading-relaxed">{content}</p>
       </div>
     </div>

@@ -172,12 +172,22 @@ def restore_session(session_id: str) -> Session | None:
 async def run_session_turn(
     session: Session,
     prompt: str,
+    *,
+    original_prompt: str | None = None,
+    attachment_ids: list[str] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Run one user turn on *session*, yielding TraceEvent-style dicts.
 
     Callers should iterate and broadcast each event to WS queues as well
     as send them over HTTP/SSE.
+
+    Args:
+        prompt: The (possibly attachment-inlined) prompt sent to Ollama.
+        original_prompt: The original user text before attachment inlining.
+            Stored in the DB so history shows the user-visible text only.
+        attachment_ids: IDs of uploads attached to this turn; their metadata
+            is saved in the message row for history display.
     """
     client = ollama.AsyncClient(host=settings.ollama_host)
 
@@ -190,7 +200,28 @@ async def run_session_turn(
     user_msg: dict[str, Any] = {"role": "user", "content": prompt}
     messages.append(user_msg)
     session.history.append(user_msg)
-    persist_message(session.id, "user", prompt)
+
+    # Collect attachment metadata for DB storage (filename/mime/size only)
+    attachment_refs: list[dict[str, Any]] = []
+    if attachment_ids:
+        for uid in attachment_ids:
+            info = session.get_upload(uid)
+            if info is not None:
+                attachment_refs.append({
+                    "filename": info.filename,
+                    "mime_type": info.mime_type,
+                    "size": info.size,
+                })
+
+    user_metadata: dict[str, Any] | None = (
+        {"attachments": attachment_refs} if attachment_refs else None
+    )
+    persist_message(
+        session.id,
+        "user",
+        original_prompt if original_prompt is not None else prompt,
+        metadata=user_metadata,
+    )
 
     def _ev(type_: str, data: dict[str, Any]) -> dict[str, Any]:
         return {"type": type_, "agent": "main", "data": data, "timestamp": time.time()}

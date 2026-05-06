@@ -77,25 +77,29 @@ function ChatPanel() {
               </div>
             ) : (
               sessions.map((session) => (
-                <button
+                <div
                   key={session.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSelect(session.id)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSelect(session.id)}
                   className={cn(
-                    "group flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                    "group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
                     activeSessionId === session.id
                       ? "bg-accent text-accent-foreground"
                       : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                   )}
                 >
                   <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                  <span className="flex-1 truncate text-xs">{sessionTitle(session)}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs">{sessionTitle(session)}</span>
                   <button
-                    className="hidden group-hover:flex h-4 w-4 items-center justify-center rounded text-muted-foreground/60 hover:text-destructive"
+                    className="opacity-0 group-hover:opacity-100 flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-destructive transition-opacity"
                     onClick={(e) => handleDelete(e, session.id)}
+                    title="Delete chat"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
-                </button>
+                </div>
               ))
             )}
           </div>

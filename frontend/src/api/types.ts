@@ -143,6 +143,13 @@ export interface ResultMetadata {
   tool_calls_made: number
   files_modified: string[]
   elapsed_seconds: number
+  attachments?: AttachmentRef[]
+}
+
+export interface AttachmentRef {
+  filename: string
+  mime_type: string
+  size: number
 }
 
 export interface MessageResponse {
@@ -150,6 +157,7 @@ export interface MessageResponse {
   content: string
   timestamp: number | null
   metadata: ResultMetadata | null
+  attachments?: AttachmentRef[]
 }
 
 export interface ToolCall {
@@ -181,7 +189,7 @@ export interface FileContent {
 export interface PromptRequest {
   prompt: string
   direct?: boolean
-  attachments?: string[]
+  attachment_ids?: string[]
 }
 
 export interface PromptAccepted {
@@ -261,7 +269,7 @@ export interface WSEvent {
 
 // Chat item types for rendering
 export type ChatItem =
-  | { type: "user"; content: string; timestamp: number }
+  | { type: "user"; content: string; timestamp: number; attachments?: AttachmentRef[] }
   | { type: "assistant"; content: string; timestamp: number; metadata?: ResultMetadata }
   | { type: "reasoning"; content: string; agent: string; timestamp: number }
   | { type: "tool_call"; name: string; args: Record<string, unknown>; result?: string; success?: boolean; error?: string; agent: string; id: string; timestamp: number }
