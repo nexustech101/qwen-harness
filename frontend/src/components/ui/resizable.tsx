@@ -8,7 +8,7 @@ const ResizablePanelGroup = ({
   ...props
 }: React.ComponentProps<typeof Group>) => (
   <Group
-    className={cn("flex h-full w-full", className)}
+    className={cn("h-full", className)}
     {...props}
   />
 )

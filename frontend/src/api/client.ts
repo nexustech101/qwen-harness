@@ -116,6 +116,12 @@ async function request<T>(path: string, options?: RequestInit, retrying = false)
     return undefined as T
   }
 
+  const contentType = res.headers.get("content-type") ?? ""
+  if (contentType.includes("text/event-stream") || contentType.includes("text/plain")) {
+    // SSE / plain-text response — caller doesn't need the body
+    return undefined as T
+  }
+
   return res.json() as Promise<T>
 }
 
@@ -201,7 +207,7 @@ export const api = {
       request<import("./types").MessageResponse[]>(`/api/sessions/${encodeURIComponent(id)}/messages`),
 
     sendPrompt: (id: string, body: import("./types").PromptRequest) =>
-      request<import("./types").PromptAccepted>(`/api/sessions/${encodeURIComponent(id)}/messages`, {
+      request<import("./types").PromptAccepted>(`/api/sessions/${encodeURIComponent(id)}/prompt`, {
         method: "POST",
         body: JSON.stringify(body),
       }),

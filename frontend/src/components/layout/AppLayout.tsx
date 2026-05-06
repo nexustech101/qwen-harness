@@ -1,8 +1,4 @@
-import { useEffect } from "react"
 import { MessageSquare, GitBranch, Plug, Settings, PanelLeft, Sun, Moon } from "lucide-react"
-import { usePanelRef } from "react-resizable-panels"
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable"
-import { Button } from "@/components/ui/button"
 import { StatusBar } from "./StatusBar"
 import { Sidebar } from "@/components/sidebar/Sidebar"
 import { ChatView } from "@/components/chat/ChatView"
@@ -72,18 +68,7 @@ function NavRail() {
 }
 
 export function AppLayout() {
-  const { sidebarOpen, activeSessionId, activeView } = useUIStore()
-  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
-
-  const sidebarRef = usePanelRef()
-
-  // Sync store → panel
-  useEffect(() => {
-    const panel = sidebarRef.current
-    if (!panel) return
-    if (sidebarOpen && panel.isCollapsed()) panel.expand()
-    if (!sidebarOpen && !panel.isCollapsed()) panel.collapse()
-  }, [sidebarOpen, sidebarRef])
+  const { activeSessionId, activeView, sidebarOpen } = useUIStore()
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -91,38 +76,27 @@ export function AppLayout() {
         {/* Always-visible nav rail */}
         <NavRail />
 
-        {/* Sidebar content + main */}
-        <ResizablePanelGroup orientation="horizontal" className="flex-1">
-          <ResizablePanel
-            defaultSize={18}
-            minSize={12}
-            maxSize={30}
-            collapsible
-            collapsedSize={0}
-            panelRef={sidebarRef}
-            id="sidebar"
-            onResize={(size) => {
-              const collapsed = size.asPercentage < 1
-              if (collapsed && sidebarOpen) setSidebarOpen(false)
-              if (!collapsed && !sidebarOpen) setSidebarOpen(true)
-            }}
-          >
-            <Sidebar />
-          </ResizablePanel>
+        {/* Collapsible sidebar */}
+        <div
+          className={cn(
+            "flex flex-col shrink-0 overflow-hidden border-r border-border/30 bg-sidebar transition-[width] duration-200 ease-in-out",
+            sidebarOpen ? "w-60" : "w-0",
+          )}
+        >
+          <Sidebar />
+        </div>
 
-          <ResizableHandle />
-
-          {/* Main content area */}
-          <ResizablePanel defaultSize={82} minSize={40} id="main">
-            {activeView === "chat" && <ChatView />}
-            {activeView === "workflows" && <WorkflowView />}
-            {activeView === "mcp" && <MCPView />}
-            {activeView === "settings" && <SettingsView />}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+        {/* Main content area */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {activeView === "chat" && <ChatView />}
+          {activeView === "workflows" && <WorkflowView />}
+          {activeView === "mcp" && <MCPView />}
+          {activeView === "settings" && <SettingsView />}
+        </div>
       </div>
 
       {activeView === "chat" && activeSessionId && <StatusBar />}
     </div>
   )
 }
+

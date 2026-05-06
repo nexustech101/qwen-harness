@@ -16,6 +16,7 @@ import api.tools.code_tools       # noqa: F401
 import api.tools.analysis_tools   # noqa: F401
 import api.tools.workspace_tools  # noqa: F401
 import api.tools.web_tools        # noqa: F401
+import api.tools.gmail_tools      # noqa: F401
 
 from api.mcp.server import mcp
 from api.tools.registry import registry
@@ -95,3 +96,51 @@ def find_files(pattern: str, path: str = ".") -> str:
 def fetch_url(url: str) -> str:
     """Fetch the text content of a URL."""
     return _call_tool("fetch_url", url=url)
+
+
+# ── Gmail tools ────────────────────────────────────────────────────────────────
+
+@mcp.tool
+def check_email(
+    max_results: int = 10,
+    query: str = "",
+    include_body: bool = True,
+) -> str:
+    """Fetch emails from the Gmail inbox and return a JSON array.
+
+    Each item contains: id, thread_id, subject, from, to, cc, date, snippet, body, labels.
+
+    Args:
+        max_results: Number of emails to return (1-50).
+        query: Gmail search query, e.g. 'is:unread' or 'from:alice@example.com'.
+        include_body: When False, skips the full body fetch for faster results.
+    """
+    return _call_tool("check_email", max_results=max_results, query=query, include_body=include_body)
+
+
+@mcp.tool
+def categorize_emails(max_results: int = 50, query: str = "") -> str:
+    """Fetch emails and group them by Gmail category.
+
+    Returns a JSON object mapping each category name (personal, social, promotions,
+    updates, forums, inbox, etc.) to a list of email summaries.
+
+    Args:
+        max_results: Total emails to fetch and categorize (1-100).
+        query: Optional Gmail search query to narrow the set of emails.
+    """
+    return _call_tool("categorize_emails", max_results=max_results, query=query)
+
+
+@mcp.tool
+def reply_to_email(message_id: str, body: str) -> str:
+    """Send a plain-text reply to an existing Gmail message.
+
+    The reply is correctly threaded via In-Reply-To / References headers.
+    Returns JSON with the sent message's id and thread_id.
+
+    Args:
+        message_id: The Gmail message ID to reply to (from the 'id' field of check_email).
+        body: Plain-text content of the reply.
+    """
+    return _call_tool("reply_to_email", message_id=message_id, body=body)

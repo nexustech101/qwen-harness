@@ -1,16 +1,20 @@
 """
-Chat service — streaming Ollama execution loop with MCP tool dispatch.
+Chat service — streaming Ollama execution loop for the frontend chat interface.
 
 `run_session_turn` is the single entry point:
   - streams tokens from Ollama
-  - dispatches tool calls via the api/tools/ registry
   - broadcasts TraceEvent-style dicts to the session's WS queues
   - persists messages to the database
+
+Note: No system-level tools (file, code, system) are exposed here. The frontend
+chat is a conversational interface for automation tasks. MCP tools are handled
+separately by the MCP server.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator
@@ -19,79 +23,22 @@ import ollama
 
 from api.config.config import get_settings
 from api.db.models import ChatMessage, ChatSession
-from api.modules.session_manager import Session
-from api.services.response_parser import StreamingParser, parse_response
-from api.tools.registry import registry
-
-# Ensure all tool implementations are loaded
-import api.tools.file_tools       # noqa: F401
-import api.tools.system_tools     # noqa: F401
-import api.tools.code_tools       # noqa: F401
-import api.tools.analysis_tools   # noqa: F401
-import api.tools.workspace_tools  # noqa: F401
-import api.tools.web_tools        # noqa: F401
+from api.modules.session_manager import Session, manager
+from api.services.response_parser import StreamingParser
 
 settings = get_settings()
 
+_SYSTEM_PROMPT = """\
+You are a helpful automation assistant. You help users plan, discuss, and reason \
+about automation tasks and workflows. You are conversational and concise.
 
-class _TextFn:
-    """Fake function object for tool calls emitted as JSON text."""
-    __slots__ = ("name", "arguments")
-
-    def __init__(self, name: str, arguments: dict) -> None:
-        self.name = name
-        self.arguments = arguments
-
-
-class _TextTC:
-    """Fake tool-call object for tool calls emitted as JSON text."""
-    __slots__ = ("function",)
-
-    def __init__(self, name: str, arguments: dict) -> None:
-        self.function = _TextFn(name, arguments)
-
-
-def _parse_text_tool_calls(content: str) -> list[_TextTC]:
-    """Return mock TCs if *content* contains a JSON-formatted tool call.
-
-    Handles two cases:
-    1. Entire (stripped) content is a JSON tool call or list of tool calls.
-    2. Content has preamble text (e.g. a filename) followed by a JSON object.
-    """
-    stripped = content.strip()
-    if not stripped:
-        return []
-
-    # Fast path: entire content is JSON
-    if stripped[0] in ("{", "["):
-        try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError:
-            pass
-        else:
-            if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
-                return [_TextTC(parsed["name"], parsed["arguments"])]
-            if isinstance(parsed, list) and all(
-                isinstance(p, dict) and "name" in p and "arguments" in p for p in parsed
-            ):
-                return [_TextTC(p["name"], p["arguments"]) for p in parsed]
-
-    # Slow path: scan for ALL embedded JSON tool call objects
-    decoder = json.JSONDecoder()
-    results: list[_TextTC] = []
-    pos = 0
-    while pos < len(content):
-        brace = content.find("{", pos)
-        if brace == -1:
-            break
-        try:
-            obj, end_pos = decoder.raw_decode(content, brace)
-            if isinstance(obj, dict) and "name" in obj and "arguments" in obj:
-                results.append(_TextTC(obj["name"], obj["arguments"]))
-            pos = end_pos
-        except (json.JSONDecodeError, ValueError):
-            pos = brace + 1
-    return results
+Rules:
+- Do NOT attempt to call any tools, read files, or execute code on your own initiative.
+- Do NOT produce JSON tool-call objects or structured function calls.
+- Respond in plain natural language.
+- If a user wants you to perform an action, describe what you would do and ask them \
+to trigger the appropriate automation.
+""".strip()
 
 
 def _utc_now() -> str:
@@ -167,12 +114,58 @@ def delete_session(session_id: str) -> bool:
         return False
 
 
+def get_messages_for_api(session_id: str) -> list[dict[str, Any]]:
+    """Return persisted messages formatted for the frontend API (with timestamps)."""
+    if not ChatMessage.schema_exists():
+        return []
+    rows = ChatMessage.objects.filter(session_id=session_id, order_by="id")
+    result = []
+    for row in rows:
+        if row.role not in ("user", "assistant"):
+            continue
+        ts: float | None = None
+        try:
+            ts = datetime.fromisoformat(row.created_at).timestamp()
+        except Exception:
+            pass
+        result.append({
+            "role": row.role,
+            "content": row.content,
+            "timestamp": ts,
+            "metadata": json.loads(row.metadata) if row.metadata else None,
+        })
+    return result
+
+
+def restore_session(session_id: str) -> Session | None:
+    """Load a session from the DB into the in-memory manager if not already present."""
+    existing = manager.get(session_id)
+    if existing:
+        return existing
+
+    db_row = get_session(session_id)
+    if db_row is None:
+        return None
+
+    # Construct a Session without calling __init__ (which generates a new UUID)
+    session: Session = Session.__new__(Session)
+    session.id = db_row.id
+    session.title = db_row.title
+    session.model = db_row.model
+    session.status = "idle"
+    session.created_at = db_row.created_at
+    session.updated_at = db_row.updated_at
+    session.history = load_messages(session_id)
+    session._ws_queues = []
+    session._lock = threading.Lock()
+    session._task = None
+    session._uploads = {}
+
+    manager.register(session)
+    return session
+
+
 # ── Tool schema helpers ────────────────────────────────────────────────────────
-
-def _build_tools_list() -> list[dict[str, Any]]:
-    """Convert the tool registry into Ollama's tools format."""
-    return registry.to_ollama_format()
-
 
 # ── Core streaming loop ────────────────────────────────────────────────────────
 
@@ -187,109 +180,58 @@ async def run_session_turn(
     as send them over HTTP/SSE.
     """
     client = ollama.AsyncClient(host=settings.ollama_host)
-    tools_list = _build_tools_list()
 
-    # Build message list: history + new user message
-    messages = list(session.history)
+    # Build message list: system prompt + history + new user message
+    # No tools are passed — the frontend chat is conversational only.
+    messages: list[dict[str, Any]] = []
+    if not session.history or session.history[0].get("role") != "system":
+        messages.append({"role": "system", "content": _SYSTEM_PROMPT})
+    messages.extend(session.history)
     user_msg: dict[str, Any] = {"role": "user", "content": prompt}
     messages.append(user_msg)
     session.history.append(user_msg)
     persist_message(session.id, "user", prompt)
 
-    yield {"type": "turn_start", "session_id": session.id, "model": session.model}
+    def _ev(type_: str, data: dict[str, Any]) -> dict[str, Any]:
+        return {"type": type_, "agent": "main", "data": data, "timestamp": time.time()}
+
+    yield _ev("turn_start", {"session_id": session.id, "model": session.model})
 
     session.status = "running"
 
     t_start = time.monotonic()
-    max_tool_rounds = 10  # prevent infinite tool loops
     streaming_parser = StreamingParser()
+    accumulated_content = ""
 
-    for _round in range(max_tool_rounds):
-        # ── Stream assistant response ──────────────────────────────────────────
-        accumulated_content = ""
-        tool_calls_raw: list[Any] = []
+    async for chunk in await client.chat(
+        model=session.model,
+        messages=messages,
+        stream=True,
+    ):
+        msg = chunk.message
+        if msg.content:
+            accumulated_content += msg.content
+            for kind, delta in streaming_parser.feed(msg.content):
+                ev_type = "thinking_delta" if kind == "thinking" else "content_delta"
+                yield _ev(ev_type, {"text": delta})
 
-        async for chunk in await client.chat(
-            model=session.model,
-            messages=messages,
-            tools=tools_list,
-            stream=True,
-        ):
-            msg = chunk.message
+    # Flush any partial lookahead buffer
+    for kind, delta in streaming_parser.flush():
+        ev_type = "thinking_delta" if kind == "thinking" else "content_delta"
+        yield _ev(ev_type, {"text": delta})
 
-            # Accumulate streamed text and classify thinking vs. content
-            if msg.content:
-                accumulated_content += msg.content
-                for kind, delta in streaming_parser.feed(msg.content):
-                    yield {"type": "thinking" if kind == "thinking" else "token", "delta": delta}
+    # Persist assistant reply
+    assistant_msg: dict[str, Any] = {"role": "assistant", "content": accumulated_content}
+    messages.append(assistant_msg)
+    session.history.append(assistant_msg)
+    persist_message(session.id, "assistant", accumulated_content)
 
-            # Collect tool calls (may arrive in last chunk)
-            if msg.tool_calls:
-                tool_calls_raw.extend(msg.tool_calls)
-
-        # Flush any partial lookahead buffer at end of each streaming round
-        for kind, delta in streaming_parser.flush():
-            yield {"type": "thinking" if kind == "thinking" else "token", "delta": delta}
-
-        # --- Detect text-format tool calls (models that emit JSON as content) ---
-        if not tool_calls_raw:
-            text_tcs = _parse_text_tool_calls(accumulated_content)
-            if text_tcs:
-                tool_calls_raw = text_tcs
-                accumulated_content = ""
-                yield {"type": "clear_content"}
-
-        # Add assistant message to history
-        assistant_msg: dict[str, Any] = {"role": "assistant", "content": accumulated_content}
-        if tool_calls_raw:
-            assistant_msg["tool_calls"] = [
-                {"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                for tc in tool_calls_raw
-            ]
-        messages.append(assistant_msg)
-        session.history.append(assistant_msg)
-        persist_message(session.id, "assistant", accumulated_content)
-
-        if not tool_calls_raw:
-            # No tools — we're done with this turn
-            break
-
-        # ── Execute tool calls ─────────────────────────────────────────────────
-        for tc in tool_calls_raw:
-            tool_name: str = tc.function.name
-            tool_args: dict[str, Any] = (
-                tc.function.arguments
-                if isinstance(tc.function.arguments, dict)
-                else {}
-            )
-
-            yield {"type": "tool_call", "name": tool_name, "args": tool_args}
-
-            try:
-                result = registry.execute(tool_name, tool_args)
-                output = str(result.data) if result.success else f"Error: {result.error}"
-                success = result.success
-            except Exception as exc:
-                output = f"Tool error: {exc}"
-                success = False
-
-            yield {"type": "tool_result", "name": tool_name, "success": success, "output": output}
-
-            tool_msg: dict[str, Any] = {"role": "tool", "content": output}
-            messages.append(tool_msg)
-            session.history.append(tool_msg)
-            persist_message(session.id, "tool", output, metadata={"tool": tool_name, "success": success})
+    if accumulated_content:
+        yield _ev("response_text", {"text": accumulated_content})
 
     elapsed = time.monotonic() - t_start
     session.status = "idle"
     session.updated_at = _utc_now()
     persist_session(session)
 
-    # Parse the final assistant message for structured metadata
-    parsed = parse_response(accumulated_content)
-    yield {
-        "type": "turn_done",
-        "elapsed_seconds": round(elapsed, 3),
-        "has_thinking": parsed.has_thinking,
-        "thinking_chars": len(parsed.thinking),
-    }
+    yield _ev("stream_end", {"elapsed": round(elapsed, 3)})

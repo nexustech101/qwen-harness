@@ -15,9 +15,11 @@ from api.config.config import get_settings
 from api.modules.session_manager import manager
 from api.services.chat_service import (
     delete_session,
+    get_messages_for_api,
+    get_session,
     list_sessions,
-    load_messages,
     persist_session,
+    restore_session,
     run_session_turn,
 )
 
@@ -53,12 +55,28 @@ async def create_session(req: CreateSessionRequest) -> dict[str, Any]:
 
 @router.get("/sessions")
 async def list_sessions_endpoint() -> list[dict[str, Any]]:
-    return [s.to_dict() for s in manager.list_all()]
+    db_sessions = list_sessions()
+    result = []
+    for db_s in db_sessions:
+        mem = manager.get(db_s.id)
+        if mem:
+            result.append(mem.to_dict())
+        else:
+            result.append({
+                "id": db_s.id,
+                "title": db_s.title,
+                "model": db_s.model,
+                "status": db_s.status,
+                "created_at": db_s.created_at,
+                "updated_at": db_s.updated_at,
+                "message_count": 0,
+            })
+    return result
 
 
 @router.get("/sessions/{session_id}")
 async def get_session_endpoint(session_id: str) -> dict[str, Any]:
-    session = manager.get(session_id)
+    session = restore_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
     return session.to_dict()
@@ -75,11 +93,10 @@ async def delete_session_endpoint(session_id: str) -> None:
 
 @router.get("/sessions/{session_id}/messages")
 async def get_messages(session_id: str) -> list[dict[str, Any]]:
-    session = manager.get(session_id)
-    if not session:
+    # Verify session exists in memory or DB
+    if not manager.get(session_id) and not get_session(session_id):
         raise HTTPException(404, "Session not found")
-    # Return in-memory history (may include tool messages); filter to user/assistant for API consumers
-    return [m for m in session.history if m.get("role") in ("user", "assistant")]
+    return get_messages_for_api(session_id)
 
 
 # ── Prompt / streaming ─────────────────────────────────────────────────────────
@@ -87,7 +104,7 @@ async def get_messages(session_id: str) -> list[dict[str, Any]]:
 @router.post("/sessions/{session_id}/prompt")
 async def send_prompt(session_id: str, req: SendPromptRequest) -> StreamingResponse:
     """Stream a session turn as Server-Sent Events."""
-    session = manager.get(session_id)
+    session = restore_session(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
     if session.status == "running":

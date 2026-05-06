@@ -162,6 +162,11 @@ class SessionManager:
         with self._lock:
             return list(self._sessions.values())
 
+    def register(self, session: "Session") -> None:
+        """Register an externally-constructed session (e.g., restored from DB)."""
+        with self._lock:
+            self._sessions[session.id] = session
+
     def delete(self, session_id: str) -> bool:
         with self._lock:
             session = self._sessions.pop(session_id, None)

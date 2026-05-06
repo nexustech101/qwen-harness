@@ -26,7 +26,11 @@ interface UIStore {
 }
 
 export const useUIStore = create<UIStore>((set) => ({
-  theme: "dark",
+  theme: (() => {
+    // Apply dark class immediately on store creation so the initial render is correct
+    document.documentElement.classList.add("dark")
+    return "dark" as const
+  })(),
   sidebarOpen: true,
   rightPanelOpen: false,
   selectedAgent: null,
