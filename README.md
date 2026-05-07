@@ -102,55 +102,6 @@ pnpm build        # outputs to frontend/dist/
 
 ---
 
-## Shell Demo
-
-```
-╭──────────────────────────────────────────────────────╮
-│  agent-shell                                         │
-│  Model  : qwen2.5-coder:7b                           │
-│  Server : http://127.0.0.1:8000                      │
-│  Session: 5c5b1f0b-7219-46ed-8ccd-a496f9702e33       │
-╰──────────────────────────────────────────────────────╯
-
-> What files are in the current directory?
-
-  ⚙ list_directory(path='.')
-  ✓ list_directory: api/, app/, frontend/, graph/, tests/, pyproject.toml, ...
-
-  Here are the top-level contents of the current directory:
-
-  - **api/** — FastAPI server, MCP server, tool registry
-  - **app/** — interactive shell and REST client
-  - **frontend/** — Vite + TypeScript web UI
-  - **graph/** — optional code graph analysis utilities
-  - **tests/** — unit and integration test suite
-  - **pyproject.toml** — project configuration and entry points
-
-> /help
-
-  ┌────────────┬──────────────────────────────────┐
-  │ /new       │ Start a new chat session         │
-  │ /sessions  │ List and switch between sessions │
-  │ /session   │ Show current session ID          │
-  │ /models    │ List available models            │
-  │ /workflows │ List workflows                   │
-  │ /clear     │ Clear the terminal               │
-  │ /help      │ Show this help                   │
-  │ quit       │ Exit the shell                   │
-  └────────────┴──────────────────────────────────┘
-
-> /sessions
-
-  ┌───┬───┬────────────┬──────────┬────────┐
-  │ # │   │ Title      │ ID       │ Status │
-  ├───┼───┼────────────┼──────────┼────────┤
-  │ 1 │ ▶ │ New chat   │ 5c5b1f0b │ idle   │
-  │ 2 │   │ New chat   │ 924c1810 │ idle   │
-  └───┴───┴────────────┴──────────┴────────┘
-```
-
----
-
 ## Architecture
 
 ```
@@ -221,14 +172,14 @@ The install scripts handle everything: virtual environment, package install, pla
 
 **macOS / Linux**
 ```bash
-git clone https://github.com/your-org/agent-mcp
+git clone https://github.com/nexustech101/qwen-harness
 cd agent-mcp
 bash install.sh
 ```
 
 **Windows (PowerShell)**
 ```powershell
-git clone https://github.com/your-org/agent-mcp
+git clone https://github.com/nexustech101/qwen-harness
 cd agent-mcp
 .\install.ps1
 ```
@@ -245,7 +196,7 @@ cd agent-mcp
 
 **Manual install**
 ```bash
-git clone https://github.com/your-org/agent-mcp
+git clone https://github.com/nexustech101/qwen-harness
 cd agent-mcp
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
