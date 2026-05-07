@@ -1,4 +1,4 @@
-"""
+﻿"""
 Main entry point for the agent shell.
 
 Usage:
@@ -13,7 +13,7 @@ import argparse
 import asyncio
 import sys
 
-from app import config
+from agent import config
 
 
 def main() -> int:
@@ -34,8 +34,8 @@ def main() -> int:
     model = args.model or config.MODEL
 
     if args.prompt:
-        from app.core.client import MCPAgentClient
-        from app.core.orchestrator import Orchestrator
+        from agent.core.client import MCPAgentClient
+        from agent.core.orchestrator import Orchestrator
 
         async def _run_once() -> int:
             async with MCPAgentClient() as client:
@@ -58,7 +58,7 @@ def main() -> int:
             print("\ninterrupted")
             return 130
     else:
-        from app.interactive import run_interactive
+        from agent.interactive import run_interactive
         run_interactive(model=model)
         return 0
 

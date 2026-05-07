@@ -1,4 +1,4 @@
-"""
+﻿"""
 System prompts — loaded from markdown template files.
 
 Prompt templates live in app/prompts/*.md and use {variable} placeholders.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from app import config
+from agent import config
 
 _PROMPTS_DIR = Path(__file__).parent
 

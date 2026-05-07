@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ollama import Client
 
-from app import config
+from agent import config
 
 
 def _utc_now() -> str:

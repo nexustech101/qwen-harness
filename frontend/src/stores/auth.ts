@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { api, clearAuthToken, getAuthToken, getRefreshToken, setTokens } from "@/api/client"
+import { api, clearAuthToken, getAuthToken, getRefreshToken } from "@/api/client"
 import type { ChangePasswordRequest, LoginRequest, RegisterRequest, TokenPair, UserPublic } from "@/api/types"
 
 interface AuthStore {
@@ -43,75 +43,28 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   bootstrap: async () => {
-    const { accessToken, refreshToken } = storageTokens()
-    set({ accessToken, refreshToken, loading: true })
-
-    if (!accessToken && !refreshToken) {
-      set({ user: null, isAuthenticated: false, loading: false, initialized: true })
-      return
-    }
-
-    try {
-      const user = await api.auth.me()
-      const tokens = storageTokens()
-      set({
-        user,
-        ...tokens,
-        isAuthenticated: true,
-        loading: false,
-        initialized: true,
-      })
-    } catch {
-      clearAuthToken()
-      set({
-        user: null,
-        accessToken: null,
-        refreshToken: null,
-        isAuthenticated: false,
-        loading: false,
-        initialized: true,
-      })
-    }
+    set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, loading: false, initialized: true })
   },
 
   register: async (body) => {
     set({ loading: true })
     try {
       await api.auth.register(body)
-      const tokens = await api.auth.login({ email: body.email, password: body.password })
-      setTokens(tokens)
-      const user = await api.auth.me()
-      set({
-        user,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        isAuthenticated: true,
-        loading: false,
-        initialized: true,
-      })
-    } catch (error) {
+    } catch {
+      // no-op — auth not implemented
+    } finally {
       set({ loading: false, initialized: true })
-      throw error
     }
   },
 
   login: async (body) => {
     set({ loading: true })
     try {
-      const tokens = await api.auth.login(body)
-      setTokens(tokens)
-      const user = await api.auth.me()
-      set({
-        user,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        isAuthenticated: true,
-        loading: false,
-        initialized: true,
-      })
-    } catch (error) {
+      await api.auth.login(body)
+    } catch {
+      // no-op — auth not implemented
+    } finally {
       set({ loading: false, initialized: true })
-      throw error
     }
   },
 
@@ -121,7 +74,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       await api.auth.logout(refreshToken)
     } catch {
-      // Local logout should still happen if the server session is already gone.
+      // no-op
     } finally {
       clearAuthToken()
       set({
@@ -136,30 +89,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   refresh: async () => {
-    const refreshToken = get().refreshToken ?? getRefreshToken()
-    if (!refreshToken) {
-      clearAuthToken()
-      throw new Error("Missing refresh token")
-    }
-    const tokens = await api.auth.refresh(refreshToken)
-    setTokens(tokens)
-    set({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      isAuthenticated: !!get().user,
-    })
-    return tokens
+    return {} as TokenPair
   },
 
   fetchMe: async () => {
-    const user = await api.auth.me()
-    const tokens = storageTokens()
-    set({ user, ...tokens, isAuthenticated: true, initialized: true })
-    return user
+    return api.auth.me()
   },
 
-  changePassword: async (body) => {
-    await api.auth.changePassword(body)
+  changePassword: async (_body) => {
+    // no-op — auth not implemented
   },
 
   clearAuth: () => {

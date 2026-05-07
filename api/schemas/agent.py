@@ -94,20 +94,9 @@ class FileContentResponse(BaseModel):
 
 class ConfigResponse(BaseModel):
     ollama_host: str
-    workspace_home: str
-    workspace_projects_dir: str
-    workspace_index_file: str
     default_model: str
-    model: str
-    planner_model: str
-    coder_model: str
-    router_mode: str
-    context_mode: str
-    tool_scope_mode: str
-    max_turns: int
-    max_messages: int
-    sub_agent_max_turns: int
-    max_concurrent_agents: int
+    llm_provider: str
+    api_version: str
 
 
 class UploadMeta(BaseModel):

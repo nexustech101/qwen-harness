@@ -1,4 +1,4 @@
-"""
+﻿"""
 MCPAgentClient — thin async HTTP/WebSocket client for the Agent API server.
 
 All calls go to the REST API (api/) running at API_BASE_URL.
@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import websockets
 
-from app import config
+from agent import config
 
 
 class MCPAgentClient:
@@ -70,10 +70,25 @@ class MCPAgentClient:
         r = await self._http.delete(f"/api/sessions/{session_id}")
         r.raise_for_status()
 
-    async def get_messages(self, session_id: str) -> list[dict[str, Any]]:
-        r = await self._http.get(f"/api/sessions/{session_id}/messages")
+    async def get_messages(self, session_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+        params = {} if limit is None else {"limit": limit}
+        r = await self._http.get(f"/api/sessions/{session_id}/messages", params=params)
         r.raise_for_status()
         return r.json()
+
+    # ── Tools ─────────────────────────────────────────────────────────────────
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        """Return tool metadata from the API server."""
+        r = await self._http.get("/api/tools")
+        r.raise_for_status()
+        return r.json()
+
+    async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+        """Invoke a tool directly via the API and return its result."""
+        r = await self._http.post("/api/tools/invoke", json={"name": name, "args": args})
+        r.raise_for_status()
+        return r.json().get("result", r.json())
 
     # ── Prompt streaming ─────────────────────────────────────────────────────
 

@@ -12,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from api.config.config import get_settings
 from api.config.logging import configure_logging
 from api.db.models import dispose_database, initialize_database
+from api.paths import ensure_data_dir
 from api.modules.error_handlers import (
     invalid_query_handler,
     not_found_handler,
@@ -29,6 +30,7 @@ logger = logging.getLogger("agent_api")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    ensure_data_dir()  # guarantee DB directory and subdirs exist before first open
     await asyncio.to_thread(initialize_database)
     logger.info("application_startup", extra={"event": "startup", "version": settings.api_version})
 

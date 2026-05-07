@@ -1,5 +1,5 @@
 import { Circle, Loader2 } from "lucide-react"
-import { cn, formatTime } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { useWSStore } from "@/stores/websocket"
 import { useSession } from "@/api/queries"
 import { useUIStore } from "@/stores/ui"
@@ -15,7 +15,6 @@ export function StatusBar() {
   const activeSessionId = useUIStore((s) => s.activeSessionId)
   const { data: session } = useSession(activeSessionId)
 
-  const stats = session?.stats
   const isRunning = session?.status === "running"
 
   return (
@@ -53,13 +52,8 @@ export function StatusBar() {
         )}
 
         {session && (
-          <span className={cn(
-            "rounded-sm px-1.5 py-0.5 text-[10px]",
-            session.persistence_mode === "persistent"
-              ? "bg-green-500/15 text-green-400"
-              : "bg-muted text-muted-foreground",
-          )}>
-            {session.chat_only ? "Chat" : session.persistence_mode === "persistent" ? "Saved" : "Guest temporary"}
+          <span className="rounded-sm px-1.5 py-0.5 text-[10px] bg-muted text-muted-foreground">
+            {session.message_count} messages
           </span>
         )}
       </div>
@@ -71,16 +65,6 @@ export function StatusBar() {
             {formatNumber(tokenStats.evalCount)} gen · {formatNumber(tokenStats.promptEvalCount)} prompt
             {tokenStats.tokPerSec > 0 && <> · {tokenStats.tokPerSec.toFixed(1)} tok/s</>}
           </span>
-        )}
-
-        {stats && (
-          <>
-            <span>Turns: {stats.total_turns}</span>
-            <span>Tools: {stats.total_tool_calls}</span>
-            {stats.elapsed_seconds > 0 && <span>Time: {formatTime(stats.elapsed_seconds)}</span>}
-            <span>Files: {stats.files_modified.length}</span>
-            <span>Messages: {stats.message_count}</span>
-          </>
         )}
       </div>
     </footer>

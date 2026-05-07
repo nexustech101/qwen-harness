@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import type { LLMProvider } from "@/api/types"
 
 type ActiveView = "chat" | "workflows" | "mcp" | "settings"
 
@@ -12,6 +13,7 @@ interface UIStore {
   selectedModel: string | null
   activeView: ActiveView
   activeWorkflowId: string | null
+  currentProvider: LLMProvider
   toggleTheme: () => void
   toggleSidebar: () => void
   toggleRightPanel: () => void
@@ -23,6 +25,7 @@ interface UIStore {
   setSelectedModel: (model: string | null) => void
   setActiveView: (view: ActiveView) => void
   setActiveWorkflow: (id: string | null) => void
+  setCurrentProvider: (p: LLMProvider) => void
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -39,6 +42,7 @@ export const useUIStore = create<UIStore>((set) => ({
   selectedModel: null,
   activeView: "chat",
   activeWorkflowId: null,
+  currentProvider: "ollama" as LLMProvider,
 
   toggleTheme: () =>
     set((s) => {
@@ -57,5 +61,6 @@ export const useUIStore = create<UIStore>((set) => ({
   setSelectedModel: (model) => set({ selectedModel: model }),
   setActiveView: (view) => set({ activeView: view }),
   setActiveWorkflow: (id) => set({ activeWorkflowId: id }),
+  setCurrentProvider: (p) => set({ currentProvider: p }),
 }))
 

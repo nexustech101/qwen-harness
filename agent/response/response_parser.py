@@ -8,7 +8,7 @@ import json
 import re
 import uuid
 
-from app.core.state import ParseResult, ToolCall
+from agent.core.state import ParseResult, ToolCall
 
 # Pattern for <think>...</think> blocks (qwen3, deepseek-r1, etc.)
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)

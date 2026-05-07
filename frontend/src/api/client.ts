@@ -144,49 +144,19 @@ export const api = {
 
   models: () => request<import("./types").OllamaModel[]>("/api/models"),
 
-  browseFolder: () => request<{ path: string | null }>("/api/browse-folder"),
-
   auth: {
-    register: (body: import("./types").RegisterRequest) =>
-      request<import("./types").UserPublic>("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-    login: (body: import("./types").LoginRequest) =>
-      request<import("./types").TokenPair>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-    refresh: (refreshToken: string) =>
-      request<import("./types").TokenPair>("/api/auth/refresh", {
-        method: "POST",
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      }),
-    logout: (refreshToken?: string | null) =>
-      request<void>("/api/auth/logout", {
-        method: "POST",
-        body: JSON.stringify({ refresh_token: refreshToken ?? null }),
-      }),
-    me: () => request<import("./types").UserPublic>("/api/auth/me"),
-    changePassword: (body: import("./types").ChangePasswordRequest) =>
-      request<void>("/api/auth/change-password", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
+    register: (_body: import("./types").RegisterRequest) => Promise.resolve({} as import("./types").UserPublic),
+    login: (_body: import("./types").LoginRequest) => Promise.resolve({} as import("./types").TokenPair),
+    refresh: (_refreshToken: string) => Promise.resolve({} as import("./types").TokenPair),
+    logout: (_refreshToken?: string | null) => Promise.resolve(),
+    me: () => Promise.reject(new ApiError(501, "Auth not implemented")),
+    changePassword: (_body: import("./types").ChangePasswordRequest) => Promise.resolve(),
   },
 
   billing: {
-    subscription: () =>
-      request<import("./types").BillingSubscriptionPublic>("/api/billing/subscription"),
-    checkoutSession: (body: { price_id?: string | null } = {}) =>
-      request<import("./types").BillingCheckoutResponse>("/api/billing/checkout-session", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-    portalSession: () =>
-      request<import("./types").BillingPortalResponse>("/api/billing/portal-session", {
-        method: "POST",
-      }),
+    subscription: () => Promise.reject(new ApiError(501, "Billing not implemented")),
+    checkoutSession: (_body?: { price_id?: string | null }) => Promise.reject(new ApiError(501, "Billing not implemented")),
+    portalSession: () => Promise.reject(new ApiError(501, "Billing not implemented")),
   },
 
   sessions: {
@@ -206,37 +176,20 @@ export const api = {
     messages: (id: string) =>
       request<import("./types").MessageResponse[]>(`/api/sessions/${encodeURIComponent(id)}/messages`),
 
-    sendPrompt: (id: string, body: import("./types").PromptRequest) =>
+    sendPrompt: (id: string, body: import("./types").SendPromptRequest) =>
       request<import("./types").PromptAccepted>(`/api/sessions/${encodeURIComponent(id)}/prompt`, {
         method: "POST",
         body: JSON.stringify(body),
       }),
   },
 
-  agents: {
-    list: (sessionId: string) =>
-      request<import("./types").AgentSummary[]>(`/api/sessions/${encodeURIComponent(sessionId)}/agents`),
-
-    get: (sessionId: string, name: string) =>
-      request<import("./types").AgentDetailResponse>(
-        `/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(name)}`,
-      ),
-
-    prompt: (sessionId: string, name: string, body: { prompt: string }) =>
-      request<import("./types").PromptAccepted>(
-        `/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(name)}/prompt`,
-        { method: "POST", body: JSON.stringify(body) },
-      ),
-  },
-
-  files: {
-    tree: (sessionId: string) =>
-      request<import("./types").FileEntry[]>(`/api/sessions/${encodeURIComponent(sessionId)}/files`),
-
-    read: (sessionId: string, filePath: string) =>
-      request<import("./types").FileContent>(
-        `/api/sessions/${encodeURIComponent(sessionId)}/files/${filePath}`,
-      ),
+  tools: {
+    list: () => request<import("./types").ToolMeta[]>("/api/tools"),
+    invoke: (body: import("./types").ToolInvokeRequest) =>
+      request<{ result: string }>("/api/tools/invoke", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
   },
 
   workflows: {

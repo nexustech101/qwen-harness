@@ -16,7 +16,7 @@ from rich.live import Live
 from rich.style import Style
 from rich.text import Text
 
-from app.logging.trace import Trace, TraceEvent
+from agent.logging.trace import Trace, TraceEvent
 
 # ── palette ────────────────────────────────────────────────────────────────────
 _DIM        = Style(color="bright_black")

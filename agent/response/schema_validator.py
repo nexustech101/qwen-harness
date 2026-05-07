@@ -1,12 +1,12 @@
-"""
+﻿"""
 Schema validator — validates tool calls against the tool registry.
 """
 
 from __future__ import annotations
 
-from app.core.state import ValidationResult
-from app.core.state import ToolCall
-from app.tools.registry import ToolRegistry
+from agent.core.state import ValidationResult
+from agent.core.state import ToolCall
+from agent.tools.registry import ToolRegistry
 
 
 class SchemaValidator:

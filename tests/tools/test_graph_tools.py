@@ -1,7 +1,7 @@
-from pathlib import Path
+﻿from pathlib import Path
 
-from app import config
-from app.tools.registry import registry
+from agent import config
+from agent.tools.registry import registry
 
 
 def _set_workspace_env(tmp_path: Path, monkeypatch) -> None:
@@ -12,7 +12,7 @@ def _set_workspace_env(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_graph_tools_register_and_query(tmp_path, monkeypatch):
-    import app.tools.graph_tools  # noqa: F401
+    import agent.tools.graph_tools  # noqa: F401
 
     _set_workspace_env(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -57,7 +57,7 @@ def test_graph_tools_register_and_query(tmp_path, monkeypatch):
 
 
 def test_graph_context_load_budget_and_evict(tmp_path, monkeypatch):
-    import app.tools.graph_tools  # noqa: F401
+    import agent.tools.graph_tools  # noqa: F401
 
     _set_workspace_env(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)

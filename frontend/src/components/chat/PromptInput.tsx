@@ -41,8 +41,6 @@ export function PromptInput({ centered }: { centered?: boolean }) {
     if (activeSessionId) return activeSessionId
     try {
       const sess = await createSession.mutateAsync({
-        chat_only: true,
-        project_root: ".",
         title: "New chat",
         model: selectedModel || null,
       })
@@ -87,8 +85,6 @@ export function PromptInput({ centered }: { centered?: boolean }) {
         clearChat()
         clearAll()
         const sess = await createSession.mutateAsync({
-          chat_only: true,
-          project_root: ".",
           title: text.slice(0, 60) || "New chat",
           model: selectedModel || null,
         })
@@ -230,7 +226,7 @@ export function PromptInput({ centered }: { centered?: boolean }) {
                   title="Select model"
                 >
                   <span className="max-w-[120px] truncate">
-                    {_displayName(selectedModel ?? config?.model ?? "")}
+                    {_displayName(selectedModel ?? config?.default_model ?? "")}
                   </span>
                   <ChevronUp className={cn("h-3 w-3 transition-transform", modelOpen && "rotate-180")} />
                 </button>
@@ -238,7 +234,7 @@ export function PromptInput({ centered }: { centered?: boolean }) {
               <PopoverContent side="bottom" align="end" className="w-72 max-h-[300px] overflow-y-auto p-1.5 rounded-xl">
                 {models && models.length > 0 ? (
                   models.map((m) => {
-                    const active = m.name === (selectedModel ?? config?.model)
+                    const active = m.name === (selectedModel ?? config?.default_model)
                     return (
                       <button
                         key={m.name}

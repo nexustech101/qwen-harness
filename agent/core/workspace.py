@@ -1,4 +1,4 @@
-"""
+﻿"""
 Workspace manager for orchestrator/sub-agent communication and rolling context.
 
 Workspace data is stored in a central system location (configured via
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import config
+from agent import config
 
 
 CONTEXT_SUMMARY_FILE = "context_summary.md"

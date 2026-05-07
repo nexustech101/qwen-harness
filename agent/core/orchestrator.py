@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.core.client import MCPAgentClient
+from agent.core.client import MCPAgentClient
 
 
 class Orchestrator:

@@ -1,14 +1,10 @@
 """
-Chat service — streaming Ollama execution loop for the frontend chat interface.
+Chat service — LangGraph-backed streaming execution loop.
 
 `run_session_turn` is the single entry point:
-  - streams tokens from Ollama
+  - delegates to api.agent.runner.run_agent_turn (LangGraph + tools)
   - broadcasts TraceEvent-style dicts to the session's WS queues
   - persists messages to the database
-
-Note: No system-level tools (file, code, system) are exposed here. The frontend
-chat is a conversational interface for automation tasks. MCP tools are handled
-separately by the MCP server.
 """
 
 from __future__ import annotations
@@ -19,26 +15,45 @@ import time
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
-import ollama
-
+from api.agent.runner import run_agent_turn
 from api.config.config import get_settings
 from api.db.models import ChatMessage, ChatSession
 from api.modules.session_manager import Session, manager
-from api.services.response_parser import StreamingParser
 
 settings = get_settings()
 
 _SYSTEM_PROMPT = """\
-You are a helpful automation assistant. You help users plan, discuss, and reason \
-about automation tasks and workflows. You are conversational and concise.
+You are a powerful AI coding and automation agent. You have access to tools for \
+reading and writing files, running shell commands, searching the workspace, \
+fetching URLs, and analysing code.
 
-Rules:
-- Do NOT attempt to call any tools, read files, or execute code on your own initiative.
-- Do NOT produce JSON tool-call objects or structured function calls.
-- Respond in plain natural language.
-- If a user wants you to perform an action, describe what you would do and ask them \
-to trigger the appropriate automation.
+Use your tools proactively when a task requires it — do not ask the user to perform \
+actions you can do yourself. When using tools, briefly state what you are doing, \
+execute the tool, then report the result concisely.
 """.strip()
+
+_WEB_RESEARCH_SYSTEM_PROMPT = """\
+You are a web research assistant with access to real-time internet search and \
+browsing tools. You can search the web, fetch and read pages, extract links, \
+and conduct multi-source research.
+
+When answering questions:
+1. Use web_search to find relevant sources.
+2. Use fetch_page to read the full content of important results.
+3. Use research_topic for questions that require synthesising multiple sources.
+4. Always cite your sources using inline numbers [1], [2], etc. and list them at the end.
+5. Distinguish clearly between what you know and what you found in the search results.
+
+You do NOT have access to the local filesystem or shell commands. If asked to \
+read or write files, explain that this capability is not available in this context.
+""".strip()
+
+
+def _system_prompt_for_profile(profile: str) -> str:
+    """Return the appropriate system prompt for the given tool profile."""
+    if profile == "web_research":
+        return _WEB_RESEARCH_SYSTEM_PROMPT
+    return _SYSTEM_PROMPT
 
 
 def _utc_now() -> str:
@@ -152,6 +167,7 @@ def restore_session(session_id: str) -> Session | None:
     session.id = db_row.id
     session.title = db_row.title
     session.model = db_row.model
+    session.tool_profile = getattr(db_row, "tool_profile", "default") or "default"
     session.status = "idle"
     session.created_at = db_row.created_at
     session.updated_at = db_row.updated_at
@@ -177,30 +193,13 @@ async def run_session_turn(
     attachment_ids: list[str] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
-    Run one user turn on *session*, yielding TraceEvent-style dicts.
+    Run one agent turn via the LangGraph loop, yielding SSE-compatible event dicts.
 
-    Callers should iterate and broadcast each event to WS queues as well
-    as send them over HTTP/SSE.
-
-    Args:
-        prompt: The (possibly attachment-inlined) prompt sent to Ollama.
-        original_prompt: The original user text before attachment inlining.
-            Stored in the DB so history shows the user-visible text only.
-        attachment_ids: IDs of uploads attached to this turn; their metadata
-            is saved in the message row for history display.
+    Delegates to api.agent.runner.run_agent_turn so all 39 registered tools are
+    available to the model. Events are the same protocol used by runner.py:
+    turn_start, content_delta, thinking_delta, tool_call, tool_result,
+    response_text, turn_done, stream_end, error.
     """
-    client = ollama.AsyncClient(host=settings.ollama_host)
-
-    # Build message list: system prompt + history + new user message
-    # No tools are passed — the frontend chat is conversational only.
-    messages: list[dict[str, Any]] = []
-    if not session.history or session.history[0].get("role") != "system":
-        messages.append({"role": "system", "content": _SYSTEM_PROMPT})
-    messages.extend(session.history)
-    user_msg: dict[str, Any] = {"role": "user", "content": prompt}
-    messages.append(user_msg)
-    session.history.append(user_msg)
-
     # Collect attachment metadata for DB storage (filename/mime/size only)
     attachment_refs: list[dict[str, Any]] = []
     if attachment_ids:
@@ -223,46 +222,37 @@ async def run_session_turn(
         metadata=user_metadata,
     )
 
-    def _ev(type_: str, data: dict[str, Any]) -> dict[str, Any]:
-        return {"type": type_, "agent": "main", "data": data, "timestamp": time.time()}
-
-    yield _ev("turn_start", {"session_id": session.id, "model": session.model})
-
+    # Build conversation history excluding any system entries
+    # (system prompt is passed separately to run_agent_turn)
+    history = [m for m in session.history if m.get("role") != "system"]
+    user_msg: dict[str, Any] = {"role": "user", "content": prompt}
+    all_messages = history + [user_msg]
+    session.history.append(user_msg)
     session.status = "running"
 
-    t_start = time.monotonic()
-    streaming_parser = StreamingParser()
     accumulated_content = ""
 
-    async for chunk in await client.chat(
+    async for event in run_agent_turn(
+        session_id=session.id,
+        provider=settings.llm_provider,
         model=session.model,
-        messages=messages,
-        stream=True,
+        messages=all_messages,
+        system_prompt=_system_prompt_for_profile(session.tool_profile),
+        tool_profile=session.tool_profile,
+        max_turns=10,
     ):
-        msg = chunk.message
-        if msg.content:
-            accumulated_content += msg.content
-            for kind, delta in streaming_parser.feed(msg.content):
-                ev_type = "thinking_delta" if kind == "thinking" else "content_delta"
-                yield _ev(ev_type, {"text": delta})
+        etype = event.get("type", "")
 
-    # Flush any partial lookahead buffer
-    for kind, delta in streaming_parser.flush():
-        ev_type = "thinking_delta" if kind == "thinking" else "content_delta"
-        yield _ev(ev_type, {"text": delta})
+        if etype == "response_text":
+            accumulated_content = event["data"].get("text", "")
 
-    # Persist assistant reply
-    assistant_msg: dict[str, Any] = {"role": "assistant", "content": accumulated_content}
-    messages.append(assistant_msg)
-    session.history.append(assistant_msg)
-    persist_message(session.id, "assistant", accumulated_content)
+        elif etype == "stream_end":
+            if accumulated_content:
+                assistant_msg: dict[str, Any] = {"role": "assistant", "content": accumulated_content}
+                session.history.append(assistant_msg)
+                persist_message(session.id, "assistant", accumulated_content)
+            session.status = "idle"
+            session.updated_at = _utc_now()
+            persist_session(session)
 
-    if accumulated_content:
-        yield _ev("response_text", {"text": accumulated_content})
-
-    elapsed = time.monotonic() - t_start
-    session.status = "idle"
-    session.updated_at = _utc_now()
-    persist_session(session)
-
-    yield _ev("stream_end", {"elapsed": round(elapsed, 3)})
+        yield event

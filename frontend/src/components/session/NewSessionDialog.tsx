@@ -1,9 +1,6 @@
 import { useState } from "react"
-import { Plus, FolderOpen, ChevronDown, Check, Cpu } from "lucide-react"
+import { Plus, ChevronDown, Check, Cpu } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Dialog,
@@ -16,7 +13,6 @@ import {
 import { useCreateSession, useConfig, useModels } from "@/api/queries"
 import { useUIStore } from "@/stores/ui"
 import { useAuthStore } from "@/stores/auth"
-import { api } from "@/api/client"
 import { cn } from "@/lib/utils"
 
 export function NewSessionDialog({
@@ -27,10 +23,7 @@ export function NewSessionDialog({
   label?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [projectRoot, setProjectRoot] = useState("")
   const [model, setModel] = useState("")
-  const [maxTurns, setMaxTurns] = useState("")
-  const [useDispatch, setUseDispatch] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
 
   const { data: config } = useConfig()
@@ -40,27 +33,14 @@ export function NewSessionDialog({
   const selectedModel = useUIStore((s) => s.selectedModel)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
 
-  const effectiveModel = model || selectedModel || config?.model || ""
-
-  const handleBrowse = async () => {
-    try {
-      const result = await api.browseFolder()
-      if (result.path) setProjectRoot(result.path)
-    } catch {
-      // Backend unreachable — silently ignore
-    }
-  }
+  const effectiveModel = model || selectedModel || config?.default_model || ""
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!projectRoot.trim()) return
 
     try {
       const session = await createSession.mutateAsync({
-        project_root: projectRoot.trim(),
         model: model.trim() || selectedModel || null,
-        max_turns: maxTurns ? parseInt(maxTurns, 10) : null,
-        use_dispatch: useDispatch,
       })
       setActiveSession(session.id)
       setOpen(false)
@@ -71,10 +51,7 @@ export function NewSessionDialog({
   }
 
   const resetForm = () => {
-    setProjectRoot("")
     setModel("")
-    setMaxTurns("")
-    setUseDispatch(false)
   }
 
   return (
@@ -106,35 +83,8 @@ export function NewSessionDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-5">
-          {/* Project Root */}
-          <div className="space-y-1.5">
-            <Label htmlFor="projectRoot" className="text-xs font-medium text-muted-foreground">
-              Project Root
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="projectRoot"
-                value={projectRoot}
-                onChange={(e) => setProjectRoot(e.target.value)}
-                placeholder="/path/to/project"
-                className="flex-1 h-9 text-sm bg-background"
-                required
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleBrowse}
-                className="h-9 px-3 shrink-0"
-              >
-                <FolderOpen className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
           {/* Model Selector */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Model</Label>
             <Popover open={modelOpen} onOpenChange={setModelOpen}>
               <PopoverTrigger asChild>
                 <button
@@ -190,30 +140,6 @@ export function NewSessionDialog({
             </Popover>
           </div>
 
-          {/* Max Turns + Orchestrator in a row */}
-          <div className="flex gap-4 items-end">
-            <div className="space-y-1.5 flex-1">
-              <Label htmlFor="maxTurns" className="text-xs font-medium text-muted-foreground">
-                Max Turns
-              </Label>
-              <Input
-                id="maxTurns"
-                type="number"
-                value={maxTurns}
-                onChange={(e) => setMaxTurns(e.target.value)}
-                placeholder={String(config?.max_turns ?? 100)}
-                min={1}
-                className="h-9 text-sm bg-background"
-              />
-            </div>
-            <div className="flex items-center gap-2 pb-1">
-              <Switch id="dispatch" checked={useDispatch} onCheckedChange={setUseDispatch} />
-              <Label htmlFor="dispatch" className="text-xs text-muted-foreground whitespace-nowrap">
-                Orchestrator
-              </Label>
-            </div>
-          </div>
-
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
@@ -222,7 +148,7 @@ export function NewSessionDialog({
             <Button
               type="submit"
               size="sm"
-              disabled={!projectRoot.trim() || createSession.isPending}
+              disabled={createSession.isPending}
               className="px-5"
             >
               {createSession.isPending ? "Creating..." : "Create"}

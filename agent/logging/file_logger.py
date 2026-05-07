@@ -1,4 +1,4 @@
-"""
+﻿"""
 File logger — writes all trace events and orchestrator-level failures to a log file.
 
 Subscribes to the Trace event system and also provides direct logging for
@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from app import config
+from agent import config
 
 
 def _get_logger() -> logging.Logger:
@@ -56,7 +56,7 @@ def log_debug(message: str) -> None:
 
 def attach_to_trace(trace: "Trace") -> None:  # type: ignore # noqa: F821
     """Subscribe to all trace events and write them to the log file."""
-    from app.logging.trace import TraceEvent
+    from agent.logging.trace import TraceEvent
 
     def _on_event(event: TraceEvent) -> None:
         et = event.event_type

@@ -1,4 +1,4 @@
-from app.prompts.system_prompts import (
+﻿from agent.prompts.system_prompts import (
     main_system_prompt,
     orchestrator_prompt,
     sub_agent_prompt,

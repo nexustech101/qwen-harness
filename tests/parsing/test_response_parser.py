@@ -1,4 +1,4 @@
-from app.response.response_parser import ResponseParser
+﻿from agent.response.response_parser import ResponseParser
 
 
 def test_structured_json_with_status_and_tools():

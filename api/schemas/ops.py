@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from api.db.models import AuthEvent, SchemaMigration
-
 
 class AuthEventPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -20,7 +18,7 @@ class AuthEventPublic(BaseModel):
     created_at: str
 
     @classmethod
-    def from_model(cls, event: AuthEvent) -> "AuthEventPublic":
+    def from_model(cls, event: object) -> "AuthEventPublic":
         return cls.model_validate(event)
 
 
@@ -40,7 +38,7 @@ class MigrationRecord(BaseModel):
     details: str | None = None
 
     @classmethod
-    def from_model(cls, migration: SchemaMigration) -> "MigrationRecord":
+    def from_model(cls, migration: object) -> "MigrationRecord":
         return cls.model_validate(migration)
 
 

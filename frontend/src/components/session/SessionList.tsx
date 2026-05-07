@@ -1,11 +1,10 @@
-import { Trash2, FolderOpen, Bot, Clock, Activity } from "lucide-react"
+import { Trash2, FolderOpen, Clock, Activity } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSessions, useDeleteSession } from "@/api/queries"
 import { useUIStore } from "@/stores/ui"
-import { formatTimestamp } from "@/lib/utils"
 import { NewSessionDialog } from "./NewSessionDialog"
 import type { SessionResponse } from "@/api/types"
 
@@ -56,9 +55,7 @@ export function SessionList() {
 
 function SessionCard({ session, onClick }: { session: SessionResponse; onClick: () => void }) {
   const deleteSession = useDeleteSession()
-  const projectName = session.chat_only
-    ? session.title || session.project_name || "New chat"
-    : session.project_root.split(/[/\\]/).pop() ?? session.project_root
+  const projectName = session.title || "Untitled"
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -77,7 +74,7 @@ function SessionCard({ session, onClick }: { session: SessionResponse; onClick: 
           <div className="flex-1 overflow-hidden">
             <CardTitle className="text-base truncate">{projectName}</CardTitle>
             <CardDescription className="font-mono text-xs truncate mt-1">
-              {session.chat_only ? "Conversation" : session.project_root}
+              {session.model}
             </CardDescription>
           </div>
           <Badge variant={STATUS_VARIANT[session.status] ?? "secondary"}>
@@ -88,19 +85,12 @@ function SessionCard({ session, onClick }: { session: SessionResponse; onClick: 
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <Bot className="h-3 w-3" />
-            <span>{session.agents.length} agent{session.agents.length !== 1 ? "s" : ""}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
             <Activity className="h-3 w-3" />
-            <span>{session.stats.total_turns} turns</span>
+            <span>{session.message_count} message{session.message_count !== 1 ? "s" : ""}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Clock className="h-3 w-3" />
-            <span>{formatTimestamp(session.created_at)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="font-mono">{session.model}</span>
+            <span>{new Date(session.created_at).toLocaleTimeString()}</span>
           </div>
         </div>
 

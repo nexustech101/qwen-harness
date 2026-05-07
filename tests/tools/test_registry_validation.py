@@ -1,5 +1,5 @@
-from app.core.state import ToolResult
-from app.tools.registry import ToolRegistry
+﻿from agent.core.state import ToolResult
+from agent.tools.registry import ToolRegistry
 
 
 def _noop(**_kwargs):

@@ -7,20 +7,34 @@ name = "agent-mcp"
 version = "3.0.0"
 description = "MCP-centered AI agent platform with FastAPI and local LLMs"
 readme = "README.md"
-requires-python = ">=4.0.0"
+requires-python = ">=3.11"
 dependencies = [
-    "ollama>=0.4.0",
-    "python-dotenv>=1.0.0",
-    "rich>=13.0",
+    # Web framework
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "python-multipart>=0.0.9",
+    "slowapi>=0.1.9",
+    # LangChain / LangGraph
+    "langchain-core>=0.3",
+    "langchain-openai>=0.2",
+    "langchain-anthropic>=0.3",
+    "langchain-ollama>=0.2",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite>=2.0",
+    # LLM providers (native clients kept for MCP/Ollama model listing)
+    "ollama>=0.4.0",
+    # MCP server
+    "fastmcp>=3.0.0",
+    # Database / config
     "registers>=0.1.0",
     "pydantic-settings>=2.3.0",
-    "slowapi>=0.1.9",
-    "fastmcp>=3.0.0",
+    # CLI harness
+    "rich>=13.0",
     "httpx>=0.27",
     "websockets>=13.0",
+    # Utilities
+    "python-dotenv>=1.0.0",
+    # Gmail integration
     "google-api-python-client>=2.120.0",
     "google-auth-httplib2>=0.2.0",
     "google-auth-oauthlib>=1.2.0",
@@ -44,11 +58,11 @@ graph-all = [
 ]
 
 [project.scripts]
-agent = "app.__main__:main"
+agent = "agent.__main__:main"
 agent-api = "api.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["app*", "api*"]
+include = ["agent*", "api*", "graph*"]
 
 [tool.setuptools.package-data]
-"app.prompts" = ["*.md"]
+"agent.prompts" = ["*.md"]

@@ -1,6 +1,6 @@
-from app.core.dispatcher import Dispatcher
-from app.core.orchestrator import Orchestrator
-from app.core.state import TaskSpec
+﻿from agent.core.dispatcher import Dispatcher
+from agent.core.orchestrator import Orchestrator
+from agent.core.state import TaskSpec
 
 
 def _spec(task_id: str, depends_on=None):

@@ -1,7 +1,7 @@
-from pathlib import Path
+﻿from pathlib import Path
 
-from app import config
-from app.core.workspace import Workspace
+from agent import config
+from agent.core.workspace import Workspace
 from graph.store import GraphStore
 
 

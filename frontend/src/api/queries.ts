@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api, ApiError } from "./client"
-import type { CreateSessionRequest, PromptRequest } from "./types"
+import type { CreateSessionRequest, SendPromptRequest } from "./types"
 import { useAuthStore } from "@/stores/auth"
 import { useUIStore } from "@/stores/ui"
 import { toast } from "sonner"
@@ -95,77 +95,18 @@ export function useMessages(sessionId: string | null) {
 export function useSendPrompt(sessionId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (req: PromptRequest) => api.sessions.sendPrompt(sessionId, req),
+    mutationFn: (req: SendPromptRequest) => api.sessions.sendPrompt(sessionId, req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["session", sessionId] })
     },
   })
 }
 
-export function useAgents(sessionId: string | null) {
+export function useTools() {
   return useQuery({
-    queryKey: ["agents", sessionId],
-    queryFn: () => api.agents.list(sessionId!),
-    enabled: !!sessionId,
-    refetchInterval: 5000,
-  })
-}
-
-export function useAgentDetail(sessionId: string | null, agentName: string | null) {
-  return useQuery({
-    queryKey: ["agent", sessionId, agentName],
-    queryFn: () => api.agents.get(sessionId!, agentName!),
-    enabled: !!sessionId && !!agentName,
-    refetchInterval: (query) => {
-      const data = query.state.data
-      return data?.status === "running" ? 2000 : false
-    },
-  })
-}
-
-export function useAgentPrompt(sessionId: string, agentName: string) {
-  return useMutation({
-    mutationFn: (prompt: string) => api.agents.prompt(sessionId, agentName, { prompt }),
-  })
-}
-
-export function useFileTree(sessionId: string | null) {
-  return useQuery({
-    queryKey: ["files", sessionId],
-    queryFn: () => api.files.tree(sessionId!),
-    enabled: !!sessionId,
-  })
-}
-
-export function useFileContent(sessionId: string | null, filePath: string | null) {
-  return useQuery({
-    queryKey: ["file", sessionId, filePath],
-    queryFn: () => api.files.read(sessionId!, filePath!),
-    enabled: !!sessionId && !!filePath,
-  })
-}
-
-export function useBillingSubscription(enabled: boolean) {
-  return useQuery({
-    queryKey: ["billing", "subscription"],
-    queryFn: api.billing.subscription,
-    enabled,
-    retry: (failureCount, error) => {
-      if (error instanceof ApiError && [404, 502, 503].includes(error.status)) return false
-      return failureCount < 1
-    },
-  })
-}
-
-export function useCheckoutSession() {
-  return useMutation({
-    mutationFn: (priceId?: string | null) => api.billing.checkoutSession({ price_id: priceId ?? null }),
-  })
-}
-
-export function usePortalSession() {
-  return useMutation({
-    mutationFn: api.billing.portalSession,
+    queryKey: ["tools"],
+    queryFn: api.tools.list,
+    staleTime: 5 * 60_000,
   })
 }
 

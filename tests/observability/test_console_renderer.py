@@ -1,7 +1,7 @@
 ﻿from rich.console import Console
 
-from app.core.console_renderer import ConsoleRenderer, _short_args
-from app.logging.trace import Trace
+from agent.core.console_renderer import ConsoleRenderer, _short_args
+from agent.logging.trace import Trace
 
 
 class _DummyLive:

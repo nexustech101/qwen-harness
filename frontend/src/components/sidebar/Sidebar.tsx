@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronDown, ChevronRight, Plus, Trash2, MessageSquare, GitBranch, Play, Circle } from "lucide-react"
+import { ChevronDown, ChevronRight, Plus, Trash2, MessageSquare, GitBranch, Circle } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useSessions, useDeleteSession, useWorkflows, useDeleteWorkflow } from "@/api/queries"
 import { useUIStore } from "@/stores/ui"
@@ -12,7 +12,7 @@ import { useAuthStore } from "@/stores/auth"
 import { AuthDialog } from "@/components/account/AuthDialog"
 
 function sessionTitle(session: SessionResponse) {
-  return session.title || session.project_name || "New chat"
+  return session.title || "Untitled"
 }
 
 // ── Chat sessions panel ───────────────────────────────────────────────────────

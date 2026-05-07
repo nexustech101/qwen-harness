@@ -1,10 +1,10 @@
-import json
+﻿import json
 from types import SimpleNamespace
 
-from app import config
-from app.core.execution import ExecutionEngine, _compact_retrievable_messages
-from app.core.state import AgentState
-from app.logging.trace import Trace
+from agent import config
+from agent.core.execution import ExecutionEngine, _compact_retrievable_messages
+from agent.core.state import AgentState
+from agent.logging.trace import Trace
 
 
 def test_dynamic_tool_categories_include_graph(monkeypatch):

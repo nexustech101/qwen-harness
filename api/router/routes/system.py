@@ -24,6 +24,7 @@ async def get_config() -> dict:
         "ollama_host": settings.ollama_host,
         "default_model": settings.default_model,
         "mcp_server_name": settings.mcp_server_name,
+        "llm_provider": settings.llm_provider,
     }
 
 

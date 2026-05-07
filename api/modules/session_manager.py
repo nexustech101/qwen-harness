@@ -21,10 +21,12 @@ class Session:
         self,
         model: str,
         title: str = "New chat",
+        tool_profile: str = "default",
     ) -> None:
         self.id = str(uuid.uuid4())
         self.title = title
         self.model = model
+        self.tool_profile = tool_profile
         self.status = "idle"
         self.created_at = _utc_now()
         self.updated_at = self.created_at
@@ -134,6 +136,7 @@ class Session:
             "id": self.id,
             "title": self.title,
             "model": self.model,
+            "tool_profile": self.tool_profile,
             "status": self.status,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -148,8 +151,8 @@ class SessionManager:
         self._sessions: dict[str, Session] = {}
         self._lock = threading.Lock()
 
-    def create(self, model: str, title: str = "New chat") -> Session:
-        session = Session(model=model, title=title)
+    def create(self, model: str, title: str = "New chat", tool_profile: str = "default") -> Session:
+        session = Session(model=model, title=title, tool_profile=tool_profile)
         with self._lock:
             self._sessions[session.id] = session
         return session

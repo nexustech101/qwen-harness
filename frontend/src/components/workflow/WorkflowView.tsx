@@ -250,7 +250,7 @@ function WorkflowEditor({
                 onChange={(e) => updateSelectedStep({ model: e.target.value || undefined })}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
               >
-                <option value="">Default ({config?.model ?? "—"})</option>
+                <option value="">Default ({config?.default_model ?? "—"})</option>
                 {models?.map((m) => (
                   <option key={m.name} value={m.name}>{m.name}</option>
                 ))}

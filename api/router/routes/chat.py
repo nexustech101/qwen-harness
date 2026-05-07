@@ -36,6 +36,7 @@ def _utc_now() -> str:
 class CreateSessionRequest(BaseModel):
     model: str | None = None
     title: str = "New chat"
+    tool_profile: str = "default"
 
 
 class SendPromptRequest(BaseModel):
@@ -48,7 +49,7 @@ class SendPromptRequest(BaseModel):
 @router.post("/sessions", status_code=201)
 async def create_session(req: CreateSessionRequest) -> dict[str, Any]:
     model = req.model or settings.default_model
-    session = manager.create(model=model, title=req.title)
+    session = manager.create(model=model, title=req.title, tool_profile=req.tool_profile)
     persist_session(session)
     return session.to_dict()
 

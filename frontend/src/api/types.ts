@@ -65,22 +65,15 @@ export interface BillingPortalResponse {
 }
 
 export interface ConfigResponse {
+  app_name: string
+  api_version: string
   ollama_host: string
-  workspace_home: string
-  workspace_projects_dir: string
-  workspace_index_file: string
   default_model: string
-  model: string
-  planner_model: string
-  coder_model: string
-  router_mode: string
-  context_mode: string
-  tool_scope_mode: string
-  max_turns: number
-  max_messages: number
-  sub_agent_max_turns: number
-  max_concurrent_agents: number
+  mcp_server_name: string
+  llm_provider: "ollama" | "openai" | "anthropic"
 }
+
+export type LLMProvider = "ollama" | "openai" | "anthropic"
 
 export interface OllamaModel {
   name: string
@@ -92,15 +85,8 @@ export interface OllamaModel {
 }
 
 export interface CreateSessionRequest {
-  project_root?: string | null
-  title?: string | null
-  chat_only?: boolean
   model?: string | null
-  planner_model?: string | null
-  coder_model?: string | null
-  max_turns?: number | null
-  use_dispatch?: boolean
-  async_dispatch?: boolean
+  title?: string | null
 }
 
 export interface SessionStats {
@@ -122,19 +108,12 @@ export interface AgentSummary {
 
 export interface SessionResponse {
   id: string
-  project_root: string
-  project_name: string
   title: string | null
-  chat_only: boolean
-  workspace_key: string
-  workspace_root: string
-  persistence_mode: "guest" | "persistent"
-  owner_user_id: number | null
-  status: "idle" | "running" | "error"
   model: string
-  created_at: number
-  stats: SessionStats
-  agents: AgentSummary[]
+  status: "idle" | "running" | "error"
+  created_at: string
+  updated_at: string
+  message_count: number
 }
 
 export interface ResultMetadata {
@@ -192,6 +171,11 @@ export interface PromptRequest {
   attachment_ids?: string[]
 }
 
+export interface SendPromptRequest {
+  prompt: string
+  attachment_ids?: string[]
+}
+
 export interface PromptAccepted {
   status: string
   session_id: string
@@ -208,6 +192,16 @@ export interface UploadMeta {
 
 export interface UploadResponse {
   uploads: UploadMeta[]
+}
+
+export interface ToolMeta {
+  name: string
+  description: string
+}
+
+export interface ToolInvokeRequest {
+  name: string
+  args: Record<string, unknown>
 }
 
 // ── Workflow types ─────────────────────────────────────────────────────────────
